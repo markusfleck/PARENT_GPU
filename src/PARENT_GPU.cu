@@ -26,25 +26,25 @@ class GPU_RAM_Block{
 	       	PRECISION *gpu_ram_end;
 		unsigned long long int n_bytes;
 
-	GPU_RAM_Block(unsigned char type, unsigned int first_dof, unsigned int n_dofs, 
-			PRECISION *cpu_ram_start, PRECISION *gpu_ram_start, unsigned long long int n_bytes){
-		
-		this->type = type;
-		this->first_dof = first_dof;
-		this->n_dofs = n_dofs;
-		this->last_dof = first_dof + n_dofs - 1;
-		this->cpu_ram_start = cpu_ram_start;
-		this->cpu_ram_end = cpu_ram_start + (n_bytes - 1) / sizeof(PRECISION);
-		this->gpu_ram_start = gpu_ram_start;
-		this->gpu_ram_end = gpu_ram_start + (n_bytes - 1) / sizeof(PRECISION);
-		this->n_bytes = n_bytes;
+		GPU_RAM_Block(unsigned char type, unsigned int first_dof, unsigned int n_dofs, 
+				PRECISION *cpu_ram_start, PRECISION *gpu_ram_start, unsigned long long int n_bytes)
+		{
+			this->type = type;
+			this->first_dof = first_dof;
+			this->n_dofs = n_dofs;
+			this->last_dof = first_dof + n_dofs - 1;
+			this->cpu_ram_start = cpu_ram_start;
+			this->cpu_ram_end = cpu_ram_start + (n_bytes - 1) / sizeof(PRECISION);
+			this->gpu_ram_start = gpu_ram_start;
+			this->gpu_ram_end = gpu_ram_start + (n_bytes - 1) / sizeof(PRECISION);
+			this->n_bytes = n_bytes;
+		}
 
-	}
 
-
-	void load_GPU(){
-		gpuErrchk(cudaMemcpy(cpu_ram_start, gpu_ram_start, n_bytes, cudaMemcpyHostToDevice));
-	}	
+		void load_GPU()
+		{
+			gpuErrchk(cudaMemcpy(cpu_ram_start, gpu_ram_start, n_bytes, cudaMemcpyHostToDevice));
+		}	
 
 
 
@@ -52,7 +52,21 @@ class GPU_RAM_Block{
 
 
 
+class CPU_RAM_Block{
+	public:
+		PRECISION *ram_start;
+                PRECISION *ram_end;
+                unsigned long long int n_bytes;
+		GPU_RAM_Block *blocks;
+	
+		CPU_RAM_Block(PRECISION *ram_start, unsigned long long int n_bytes)
+		{
+			this->ram_start = ram_start;
+			this->n_bytes = n_bytes;
+			this->ram_end = ram_start + (n_bytes - 1) / sizeof(PRECISION);
+		}
 
+};
 
 
 
