@@ -69,9 +69,30 @@ class CPU_RAM_Block{
 };
 
 
+class RAM{
+	public:
+		char *cpu_ram_start;
+                char *cpu_ram_end;
+                unsigned long long int cpu_n_bytes;
+		char *gpu_ram_start;
+                char *gpu_ram_end;
+                unsigned long long int gpu_n_bytes;
 
+		RAM(unsigned long long int cpu_n_bytes, unsigned long long int gpu_n_bytes, unsigned int n_dihedrals, unsigned int n_frames)
+		{
+			this->cpu_ram_start = new char [cpu_n_bytes];
+			this->cpu_ram_end = cpu_ram_start + cpu_n_bytes - 1;
+                        this->cpu_n_bytes = cpu_n_bytes; 
+			gpuErrchk( cudaMalloc((void**) &gpu_ram_start, gpu_n_bytes) );
+                        this->gpu_ram_end = gpu_ram_start + gpu_n_bytes - 1;
+                        this->gpu_n_bytes = gpu_n_bytes;
+		}
+
+
+};
 
 int main(){
+
 
 
 return 0;
