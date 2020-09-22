@@ -1,0 +1,8 @@
+#!/bin/bash
+rm -r bin
+mkdir bin
+
+g++ -std=c++11 src/PARENT_GPU.cpp -o bin/PARENT_GPU
+bin/PARENT_GPU
+
+
