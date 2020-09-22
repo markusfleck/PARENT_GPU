@@ -93,7 +93,10 @@ class RAM{
 
 int main(){
 
+long long unsigned int cpu_ram_available = (long long unsigned int)(1024)*1024*1024*4;
+long long unsigned int gpu_ram_available = (long long unsigned int)(1024)*1024*1024*1;
 
+RAM ram(cpu_ram_available, gpu_ram_available, 10, 10);
 
 return 0;
 }
