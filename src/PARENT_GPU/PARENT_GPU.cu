@@ -1,7 +1,9 @@
 #include <iostream>
 #include <cmath>
-
+#include <vector>
+#include "../util/types.h"
 #define PRECISION double
+
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t return_code, const char *file, int line)
@@ -15,6 +17,49 @@ inline void gpuAssert(cudaError_t return_code, const char *file, int line)
 
 using namespace std;
 
+
+
+
+unsigned char get_dof_type_from_id(unsigned int dof_id, unsigned int n_dihedrals)
+{
+	if(dof_id < n_dihedrals + 2) return TYPE_B;
+	if(dof_id < 2 * n_dihedrals + 3) return TYPE_A;
+	return TYPE_D;
+}
+
+
+
+unsigned int get_min_id_for_type(unsigned char type, unsigned int n_dihedrals)
+{
+	switch(type) {
+  		case TYPE_B:
+    			return 0;
+  		case TYPE_A:
+    			return n_dihedrals + 2;
+		case TYPE_D:
+    			return 2 * n_dihedrals + 3;
+	}
+	return 42;
+}
+
+
+
+unsigned int get_max_id_for_type(unsigned char type, unsigned int n_dihedrals)
+{
+	switch(type) {
+  		case TYPE_B:
+    			return n_dihedrals + 1;
+  		case TYPE_A:
+    			return 2 * n_dihedrals + 2;
+		case TYPE_D:
+    			return 3 * n_dihedrals + 2;
+	}
+	return 42;
+}
+
+
+
+
 class GPU_RAM_Block
 {
 	public:
@@ -22,28 +67,21 @@ class GPU_RAM_Block
 		unsigned int first_dof;
 		unsigned int last_dof;
 		unsigned int n_dofs;
-		PRECISION *cpu_ram_start;
-		PRECISION *cpu_ram_end; 
-		PRECISION *gpu_ram_start;
-	       	PRECISION *gpu_ram_end;
 		unsigned long long int n_bytes;
+		PRECISION* cpu_ram_start;
 
-		GPU_RAM_Block(unsigned char type, unsigned int first_dof, unsigned int n_dofs, 
-				PRECISION *cpu_ram_start, PRECISION *gpu_ram_start, unsigned long long int n_bytes)
+		GPU_RAM_Block(PRECISION* cpu_ram_start, unsigned int first_dof, unsigned int last_dof, unsigned int n_frames, unsigned int n_dihedrals)
 		{
-			this->type = type;
-			this->first_dof = first_dof;
-			this->n_dofs = n_dofs;
-			this->last_dof = first_dof + n_dofs - 1;
 			this->cpu_ram_start = cpu_ram_start;
-			this->cpu_ram_end = cpu_ram_start + (n_bytes - 1) / sizeof(PRECISION);
-			this->gpu_ram_start = gpu_ram_start;
-			this->gpu_ram_end = gpu_ram_start + (n_bytes - 1) / sizeof(PRECISION);
-			this->n_bytes = n_bytes;
+			this->type = get_dof_type_from_id(first_dof, n_dihedrals);
+			this->first_dof = first_dof;
+			this->last_dof = last_dof;
+			n_dofs = last_dof - first_dof + 1;
+			n_bytes = n_dofs * n_frames * sizeof(PRECISION);
 		}
 
 
-		void load_GPU()
+		void deploy(PRECISION* gpu_ram_start)
 		{
 			gpuErrchk(cudaMemcpy(cpu_ram_start, gpu_ram_start, n_bytes, cudaMemcpyHostToDevice));
 		}	
@@ -54,16 +92,64 @@ class GPU_RAM_Block
 class CPU_RAM_Block
 {
 	public:
-		PRECISION *ram_start;
-                PRECISION *ram_end;
-                unsigned long long int n_bytes;
-		GPU_RAM_Block *blocks;
+		unsigned int dof_id_start;
+		unsigned int dof_id_end; //inclusive
+		unsigned int type_id_start[3];
+		unsigned int type_id_end[3]; //inclusive
+		unsigned int type_n_dofs[3];
+		unsigned int gpu_ram_blocks_per_type[3];
+		unsigned int n_dihedrals;
+		unsigned int gpu_dofs_per_block;
+
+		vector<GPU_RAM_Block> blocks;
 	
-		CPU_RAM_Block(PRECISION *ram_start, unsigned long long int n_bytes)
+		CPU_RAM_Block(unsigned int dof_id_start, unsigned int dof_id_end, unsigned int gpu_dofs_per_block, unsigned int n_dihedrals)
 		{
-			this->ram_start = ram_start;
-			this->n_bytes = n_bytes;
-			this->ram_end = ram_start + (n_bytes - 1) / sizeof(PRECISION);
+			this->dof_id_start = dof_id_start;
+			this->dof_id_end = dof_id_end;
+			this->n_dihedrals = n_dihedrals;
+			this->gpu_dofs_per_block = gpu_dofs_per_block;		
+		
+			for(unsigned char type = get_dof_type_from_id(dof_id_start, n_dihedrals); type <= get_dof_type_from_id(dof_id_end, n_dihedrals); type++){
+				if(dof_id_start < get_min_id_for_type(type, n_dihedrals)) 
+				{
+					type_id_start[type] = get_min_id_for_type(type, n_dihedrals); 
+				}
+				else
+				{
+					type_id_start[type] = dof_id_start;
+				}
+				
+				if(dof_id_end > get_max_id_for_type(type, n_dihedrals)) 
+				{
+					type_id_end[type] = get_max_id_for_type(type, n_dihedrals);
+				}
+				else
+				{
+					type_id_end[type] = dof_id_end;
+				} 
+				type_n_dofs[type] = type_id_end[type] - type_id_start[type] + 1;
+				
+				gpu_ram_blocks_per_type[type] = type_n_dofs[type] / gpu_dofs_per_block;
+				if(type_n_dofs[type] % gpu_dofs_per_block > 0) gpu_ram_blocks_per_type[type] += 1;
+ 
+			}
+		}
+
+		void deploy(PRECISION* block_start, unsigned int n_frames){
+			//TODO: load dofs from trajectory to block_start
+			
+			blocks.clear();
+			for(unsigned char type = get_dof_type_from_id(dof_id_start, n_dihedrals); type <= get_dof_type_from_id(dof_id_end, n_dihedrals); type++){
+				for(unsigned int i = 0; i < gpu_ram_blocks_per_type[type]; i++)
+				{
+					unsigned int block_id_start = type_id_start[type] + i *  gpu_dofs_per_block;
+					unsigned int block_id_end = type_id_start[type] + (i+1) *  gpu_dofs_per_block - 1; 
+					if (block_id_end > type_id_end[type]) block_id_end = type_id_end[type];
+					PRECISION* cpu_ram_start = block_start + (block_id_start - dof_id_start) * n_frames;	
+					blocks.push_back( *new GPU_RAM_Block(cpu_ram_start, block_id_start, block_id_end, n_frames, n_dihedrals) ); 
+				} 
+			}		
 		}
 
 };
@@ -154,6 +240,7 @@ class RAM{
                 unsigned long long int gpu_n_bytes;
 		GPU_RAM_Layout* gpu_ram_layout;
 		CPU_RAM_Layout* cpu_ram_layout;
+		unsigned int n_dihedrals;
 		unsigned int n_dofs_total;
 
 		RAM(unsigned long long int cpu_n_bytes, unsigned long long int gpu_n_bytes, unsigned int n_dihedrals, unsigned int n_frames, unsigned int n_bins)
@@ -165,6 +252,7 @@ class RAM{
                         gpu_ram_end = gpu_ram_start + gpu_n_bytes - 1;
                         this->gpu_n_bytes = gpu_n_bytes;
 			gpu_ram_layout = new GPU_RAM_Layout(n_frames, n_bins, gpu_n_bytes, gpu_ram_start);
+			this->n_dihedrals = n_dihedrals;
 			n_dofs_total = 3 * (n_dihedrals + 1);
 			cpu_ram_layout = new CPU_RAM_Layout(n_frames, cpu_n_bytes, cpu_ram_start, gpu_ram_layout->dofs_per_block, n_dofs_total);
 		}
