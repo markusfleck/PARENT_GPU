@@ -1,7 +1,20 @@
 #!/bin/bash
 rm -r bin
+rm -r obj
+rm -r output
 mkdir bin
+mkdir obj
+mkdir output
 
-nvcc --std=c++11 -O3 -Xptxas -O3 -gencode=arch=compute_30,code=\"sm_30,compute_30\" src/PARENT_GPU/PARENT_GPU.cu -o bin/PARENT_GPU && bin/PARENT_GPU
+
+g++ -std=c++11 -c src/util/classes/EntropyMatrix.cpp -o obj/EntropyMatrix.o -Wall
+g++ -c src/util/io/io_binary.cpp -o obj/io_binary_tmp.o -Wall
+ld -r obj/io_binary_tmp.o obj/EntropyMatrix.o -o obj/io_binary.o
+g++ -c src/util/io/io_text.cpp -o obj/io_text.o -Wall
+ld -r obj/io_binary.o obj/io_text.o -o obj/io.o
+
+nvcc --std=c++11 -O3 -Xptxas -O3 -gencode=arch=compute_30,code=\"sm_30,compute_30\" src/PARENT_GPU/PARENT_GPU.cu obj/io.o -o bin/PARENT_GPU \
+&& bin/PARENT_GPU -f devel/traj/UBM2_1.bat -o output/UBM2_1_MIE_GPU.par -b 50
+#bin/get_values_from_PAR -p ${OUTDIR}/${NAME}_MIE_GPU.par --short 
 
 
