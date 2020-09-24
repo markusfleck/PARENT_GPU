@@ -112,6 +112,7 @@ class CPU_RAM_Block
 	public:
 		unsigned int dof_id_start;
 		unsigned int dof_id_end; //inclusive
+		unsigned int n_dofs;
 		unsigned int type_id_start[3];
 		unsigned int type_id_end[3]; //inclusive
 		unsigned int type_n_dofs[3];
@@ -122,14 +123,15 @@ class CPU_RAM_Block
 		ifstream* bat_file;
 		streamoff file_dofs_begin; 
 		unsigned char precision_traj;
-
 		vector<GPU_RAM_Block> blocks;
+		PRECISION* block_start;
 	
 		CPU_RAM_Block(unsigned int dof_id_start, unsigned int dof_id_end, unsigned int gpu_dofs_per_block, unsigned int n_dihedrals, 
 				unsigned int n_frames, ifstream* bat_file, streamoff file_dofs_begin, unsigned char precision_traj)
 		{
 			this->dof_id_start = dof_id_start;
 			this->dof_id_end = dof_id_end;
+			this->n_dofs = dof_id_end - dof_id_start + 1;
 			this->n_dihedrals = n_dihedrals;
 			this->gpu_dofs_per_block = gpu_dofs_per_block;
 			this->n_frames = n_frames;
@@ -234,6 +236,7 @@ class CPU_RAM_Block
 		}
 
 		void deploy(PRECISION* block_start){
+			this->block_start = block_start;
 			load_dofs(block_start);
 			
 			blocks.clear();
@@ -250,6 +253,48 @@ class CPU_RAM_Block
 			}		
 		}
 
+		void calculate_extrema(PRECISION* extrema)
+		{
+    			#pragma omp parallel
+    			{
+        			PRECISION tmpMin,tmpMax;
+
+        			#pragma omp for
+        			for(int j = 0; j < n_dofs; j++) 
+				{ //for all dofs 
+            				tmpMax = block_start[j * n_frames];
+            				tmpMin = block_start[j * n_frames];
+            				for(int i = 1; i < n_frames; i++) 
+					{ //and all frames
+                				if(block_start[j * n_frames + i] > tmpMax) 
+						{
+                    					tmpMax = block_start[j * n_frames + i];
+                				}
+                				if(block_start[j * n_frames + i] < tmpMin) 
+						{
+                    					tmpMin = block_start[j * n_frames + i];   //find the maximum and minmum values
+                				}
+            				}
+           				if( (tmpMin < 0.0) || (tmpMax < 0.0) ) 
+					{
+                				cerr<<"ERROR: Degree of freedom "<< dof_id_start + j <<" is smaller than 0.0"<<endl;
+                				exit(EXIT_FAILURE);
+            				}
+            				tmpMin -= 5e-9 * ( sizeof(PRECISION) == sizeof(float) ? 1e5 :1 );//and increase the boundaries a tiny bit
+            				tmpMax += 5e-9 * ( sizeof(PRECISION) == sizeof(float) ? 1e5 :1 );
+            				if(tmpMin < 0.0) 
+					{
+                				tmpMin = 0.0;
+            				}
+            				if ( (tmpMax-tmpMin) < 1.0e-4) 
+					{
+                				tmpMax+=0.05;
+            				}
+            				extrema[dof_id_start + j] = tmpMin;//and store the calculated values
+            				extrema[dof_id_start + j + n_dofs] = tmpMax;
+        			}
+    			}
+		}
 };
 
 
@@ -292,6 +337,8 @@ class CPU_RAM_Layout
 		PRECISION* result_entropy1D;
 		PRECISION* result_entropy2D;
 		PRECISION* extrema;
+		PRECISION* minima;
+		PRECISION* maxima;
 		PRECISION* tmp_result_entropy;
 		unsigned int* tmp_result_occupied_bins;
 		double* tmp_read;
@@ -319,7 +366,9 @@ class CPU_RAM_Layout
 			result_entropy1D = dof_block_2 + dofs_per_block * n_frames;
 			result_entropy2D = result_entropy1D + n_dofs_total;
 			extrema = result_entropy2D + n_dofs_total * (n_dofs_total - 1) / 2;
-			tmp_result_entropy = extrema + 2 * n_dofs_total;
+			minima = extrema;
+			maxima = extrema + n_dofs_total;
+			tmp_result_entropy = maxima + n_dofs_total;
 			tmp_result_occupied_bins = (unsigned int*)(tmp_result_entropy + (2 * gpu_dofs_per_block - 1) * gpu_dofs_per_block);
 			tmp_read = (double*)(tmp_result_occupied_bins + (2 * gpu_dofs_per_block - 1) * gpu_dofs_per_block);
 		}
