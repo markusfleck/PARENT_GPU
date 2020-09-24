@@ -115,7 +115,7 @@ class CPU_RAM_Block
 		unsigned int n_dofs;
 		unsigned int type_id_start[3];
 		unsigned int type_id_end[3]; //inclusive
-		unsigned int type_n_dofs[3];
+		unsigned int type_n_dofs[3] = {0,0,0};
 		unsigned int gpu_ram_blocks_per_type[3];
 		unsigned int n_dihedrals;
 		unsigned int gpu_dofs_per_block;
@@ -125,10 +125,16 @@ class CPU_RAM_Block
 		unsigned char precision_traj;
 		vector<GPU_RAM_Block> blocks;
 		PRECISION* block_start;
+		PRECISION* extrema;
+		bool extrema_calculated = false;
 	
 		CPU_RAM_Block(unsigned int dof_id_start, unsigned int dof_id_end, unsigned int gpu_dofs_per_block, unsigned int n_dihedrals, 
-				unsigned int n_frames, ifstream* bat_file, streamoff file_dofs_begin, unsigned char precision_traj)
+				unsigned int n_frames, ifstream* bat_file, streamoff file_dofs_begin, unsigned char precision_traj, PRECISION* extrema)
 		{
+			cout<<"\nRAMBLOCK "<<dof_id_start<<" "<<dof_id_end<<endl;
+			cout<<"DOFS BEFORE "<<type_n_dofs[0]<<" "<<type_n_dofs[1]<<" "<<type_n_dofs[2]<<endl;
+
+			
 			this->dof_id_start = dof_id_start;
 			this->dof_id_end = dof_id_end;
 			this->n_dofs = dof_id_end - dof_id_start + 1;
@@ -137,9 +143,12 @@ class CPU_RAM_Block
 			this->n_frames = n_frames;
 			this->bat_file = bat_file; 
 			this->file_dofs_begin = file_dofs_begin;
-			this->precision_traj = precision_traj;		
+			this->precision_traj = precision_traj;
+			this->extrema = extrema; 		
 		
-			for(unsigned char type = get_dof_type_from_id(dof_id_start, n_dihedrals); type <= get_dof_type_from_id(dof_id_end, n_dihedrals); type++){
+			
+			for(unsigned int type = get_dof_type_from_id(dof_id_start, n_dihedrals); type <= get_dof_type_from_id(dof_id_end, n_dihedrals); type++){
+				cout<<"TYPE "<<type<<endl;
 				if(dof_id_start < get_min_id_for_type(type, n_dihedrals)) 
 				{
 					type_id_start[type] = get_min_id_for_type(type, n_dihedrals); 
@@ -163,6 +172,7 @@ class CPU_RAM_Block
 				if(type_n_dofs[type] % gpu_dofs_per_block > 0) gpu_ram_blocks_per_type[type] += 1;
  
 			}
+			cout<<"DOFS AFTER "<<type_n_dofs[0]<<" "<<type_n_dofs[1]<<" "<<type_n_dofs[2]<<endl<<endl;
 		}
 
 		unsigned char load_dofs(PRECISION* dof_bank)
@@ -238,6 +248,9 @@ class CPU_RAM_Block
 		void deploy(PRECISION* block_start){
 			this->block_start = block_start;
 			load_dofs(block_start);
+			modfit_dihedrals();
+			if(!extrema_calculated) calculate_extrema();
+			
 			
 			blocks.clear();
 			for(unsigned char type = get_dof_type_from_id(dof_id_start, n_dihedrals); type <= get_dof_type_from_id(dof_id_end, n_dihedrals); type++)
@@ -253,7 +266,88 @@ class CPU_RAM_Block
 			}		
 		}
 
-		void calculate_extrema(PRECISION* extrema)
+
+		void modfit_dihedrals()
+		{
+			if (type_n_dofs[TYPE_D] == 0) return;
+		   	PRECISION* dihedrals = block_start + (type_n_dofs[TYPE_B] + type_n_dofs[TYPE_A]) * n_frames;
+			cout<<"dofs: "<<type_n_dofs[TYPE_B]<<" "<<type_n_dofs[TYPE_A]<<" "<<type_n_dofs[TYPE_D]<<endl;
+			const PRECISION pi=acos(-1);
+
+		    	
+			#pragma omp parallel
+		    	{
+		        	PRECISION modFit, binsize;
+		        	int longestZeroStretch, longestZeroStretchPos, currentZeroStretch, currentZeroStretchPos;
+		        	bool zeroExists;
+		        	long long int histo[MODFITNBINS];
+		        
+		        	#pragma omp for
+		        	for(int j = 0; j < type_n_dofs[TYPE_D]; j++) 
+				{ //for all dihedrals
+		        		//first build a histogram of the dihedral values over the trajectory
+		        		for(int k=0; k<MODFITNBINS; k++) histo[k] = 0;
+		        
+		            		binsize = ( 2 * pi + 5e-9 * (sizeof(PRECISION) == sizeof(float) ? 100000 : 1) ) / MODFITNBINS;
+		            		for(int i = 0; i < n_frames; i++) histo[ int( ( dihedrals[j * n_frames + i] ) / binsize ) ] += 1;
+		            		
+					zeroExists = false;
+		            		for(int k=0; k<MODFITNBINS; k++) zeroExists=zeroExists||(histo[k]==0);
+					
+		            		if(zeroExists) 
+					{ //if any of the bins of the histogram is empty find the longest consecutive stretch of  empty bins
+		                		longestZeroStretch = 0;
+		                		currentZeroStretch = 0;
+		                		longestZeroStretchPos = -1;
+		                		for(int k = 0; k < 2*MODFITNBINS; k++) 
+						{ //for all bins of the histogram
+		                    			int l = k % MODFITNBINS; //taking car of zero stretches which span the boundaries
+		                    			if( (currentZeroStretch == 0) && (histo[l] == 0) ) 
+							{ //find and save a beginning zero stretch
+		                        			currentZeroStretch = 1;
+		                        			currentZeroStretchPos = k;
+		                    			}
+		                    			if( (currentZeroStretch > 0) && (histo[l] == 0) ) 
+							{
+		                        			currentZeroStretch+=1;
+		                    			}
+		                    			if( (currentZeroStretch > 0) && ( histo[l] != 0) ) 
+							{ //and the end of it. If it is currently the longest zero stretch, save it
+		                        			if(currentZeroStretch > longestZeroStretch) 
+								{
+		                            				longestZeroStretch = currentZeroStretch;
+		                            				longestZeroStretchPos = currentZeroStretchPos;
+		                        			}
+		                        			currentZeroStretch = 0;
+		                    			}
+		                		}
+		            		}
+		            		else 
+					{ //if none of the bins is empty
+		                		longestZeroStretchPos = 0;  //misuse the zeroStretch variables for determining the minimum
+		                		longestZeroStretch = histo[0];
+		                		for(int k = 0; k < MODFITNBINS; k++) 
+						{
+		                    			if(histo[k] < longestZeroStretch) 
+							{
+		                        			longestZeroStretch = histo[k];
+		                        			longestZeroStretchPos = k;
+		                    			}
+		                		}
+		            		}
+		            		modFit = 2 * pi - (longestZeroStretchPos + 0.5) * binsize; //calculate the shift to put the zero stretch to the 2pi end
+					for(int k = 0; k < n_frames; k++) 
+					{							
+						dihedrals[j * n_frames + k] = dihedrals[j * n_frames + k] + modFit - 2 * pi 
+										* int( (dihedrals[j * n_frames + k ] + modFit ) /(2 * pi) );   //and apply it taking care of circularity
+		            			
+
+					}
+		        	}
+		    	}   
+		}
+
+		void calculate_extrema()
 		{
     			#pragma omp parallel
     			{
@@ -408,7 +502,7 @@ class RAM{
 			{
 				unsigned int end = i + cpu_ram_layout->dofs_per_block - 1;
 				if(end > n_dofs_total - 1) end = n_dofs_total - 1;
-				blocks.push_back(*new CPU_RAM_Block(i, end, gpu_ram_layout->dofs_per_block, n_dihedrals, n_frames, bat_file, file_dofs_begin, precision_traj));
+				blocks.push_back(*new CPU_RAM_Block(i, end, gpu_ram_layout->dofs_per_block, n_dihedrals, n_frames, bat_file, file_dofs_begin, precision_traj, cpu_ram_layout->extrema));
 			} 
 
 			
@@ -572,7 +666,7 @@ int main(int argc, char *argv[]){
 	//ram.cpu_ram_layout->result_entropy1D[0] = 42;
 	//ram.cpu_ram_layout->result_entropy1D[-1] = 42;
 
-	//cout<<ram.gpu_ram_layout->dofs_per_block<<" "<<ram.cpu_ram_layout->dofs_per_block<<endl;
+	cout<<ram.gpu_ram_layout->dofs_per_block<<" "<<ram.cpu_ram_layout->dofs_per_block<<endl;
 
 	//ram.cpu_ram_layout->tmp_result_occupied_bins[0] = 1;
 
@@ -583,7 +677,7 @@ int main(int argc, char *argv[]){
 		//cout<<ram.cpu_ram_layout->result_entropy1D[-1]<<" "<<ram.cpu_ram_layout->result_entropy1D[0]<<endl<<endl;
 		for (unsigned int j = i + 1; j < ram.blocks.size(); j++)
 		{
-			//cout<<ram.blocks[i].dof_id_start<<" "<<ram.blocks[i].dof_id_end<<" "<<ram.blocks[j].dof_id_start<<" "<<ram.blocks[j].dof_id_end<<endl;
+			cout<<ram.blocks[i].dof_id_start<<" "<<ram.blocks[i].dof_id_end<<" "<<ram.blocks[j].dof_id_start<<" "<<ram.blocks[j].dof_id_end<<endl;
 			cout<<"Deploy Block "<<j+1<<" to RAM bank 2."<<endl;
 			ram.blocks[j].deploy(ram.cpu_ram_layout->dof_block_2);
 			//cout<<ram.cpu_ram_layout->result_entropy1D[-1]<<" "<<ram.cpu_ram_layout->result_entropy1D[0]<<endl<<endl;
@@ -591,7 +685,7 @@ int main(int argc, char *argv[]){
 		}
 	}
 
-
+	//for(int i = 0; i<3*n_dihedrals + 3; i++) cout<<ram.cpu_ram_layout->extrema[i]<<endl;
 	//timings are written to stdout
 	par_file.close();
 	gettimeofday (&tv_end, NULL);
