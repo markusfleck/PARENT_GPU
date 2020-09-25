@@ -619,6 +619,57 @@ class RAM{
 };
 
 
+class PARENT_GPU{
+	public:
+		RAM* ram;
+
+	PARENT_GPU(unsigned long long int cpu_n_bytes, unsigned long long int gpu_n_bytes, unsigned int n_dihedrals, unsigned int n_frames, 
+			unsigned int n_bins, ifstream* bat_file, streamoff file_dofs_begin, unsigned char precision_traj)
+	{
+		ram = new RAM(cpu_n_bytes, gpu_n_bytes, n_dihedrals, n_frames, n_bins, bat_file, file_dofs_begin, precision_traj);
+	
+	}
+
+	void calculate_entropy()
+	{	
+	
+		for (unsigned int i = 0; i < ram->blocks.size() - 1; i++)
+		{	cout<<"Deploying Block "<<i+1<<" to RAM bank 1."<<endl;
+			ram->blocks[i].deploy(ram->cpu_ram_layout->dof_block_1);
+			//cout<<ram->cpu_ram_layout->result_entropy1D[-1]<<" "<<ram->cpu_ram_layout->result_entropy1D[0]<<endl<<endl;
+			for (unsigned int j = i + 1; j < ram->blocks.size(); j++)
+			{
+				cout<<ram->blocks[i].dof_id_start<<" "<<ram->blocks[i].dof_id_end<<" "<<ram->blocks[j].dof_id_start<<" "<<ram->blocks[j].dof_id_end<<endl;
+				cout<<"Deploy Block "<<j+1<<" to RAM bank 2."<<endl;
+				ram->blocks[j].deploy(ram->cpu_ram_layout->dof_block_2);
+				//cout<<ram->cpu_ram_layout->result_entropy1D[-1]<<" "<<ram->cpu_ram_layout->result_entropy1D[0]<<endl<<endl;
+	
+			}
+		}
+	
+	}	
+
+//	void write_par_file()	
+//	{	    
+//		//write out the results to the binary .par file and measure time
+//	    
+//	    	if(write_PAR_body(&par_file, n_dihedrals, ram->cpu_ram_layout->result_entropy1D_b, ram->cpu_ram_layout->result_entropy1D_a, ram->cpu_ram_layout->result_entropy1D_d, 
+//	            ram->cpu_ram_layout->result_entropy2D_bb, ram->cpu_ram_layout->result_entropy2D_ba, ram->cpu_ram_layout->result_entropy2D_bd, 
+//	            ram->cpu_ram_layout->result_entropy2D_aa, ram->cpu_ram_layout->result_entropy2D_ad, ram->cpu_ram_layout->result_entropy2D_dd) !=0 ) 
+//		{
+//	        	cerr<<"AN ERROR HAS OCCURED WHILE WRITING THE FILE " <<getCmdOption(argv, argv+argc, "-o")<<" .\n";
+//	        	exit(EXIT_FAILURE);
+//	    	}
+//
+//
+//	}
+
+
+
+
+};
+
+
 #include <algorithm>
 char* getCmdOption(char ** begin, char ** end, const string & option)
 {
@@ -768,45 +819,47 @@ int main(int argc, char *argv[]){
 	unsigned long long int gpu_ram_available = static_cast<unsigned long long int>(1024)*1024*1024*1;
 
 
-	RAM ram(cpu_ram_available, gpu_ram_available, n_dihedrals, n_frames, n_bins, &bat_file, file_dofs_begin, precision_traj);
-	//ram.cpu_ram_layout->result_entropy1D[0] = 42;
-	//ram.cpu_ram_layout->result_entropy1D[-1] = 42;
+	PARENT_GPU parent_gpu(cpu_ram_available, gpu_ram_available, n_dihedrals, n_frames, n_bins, &bat_file, file_dofs_begin, precision_traj);
+	parent_gpu.calculate_entropy();
+	
+	//parent_gpu.ram->cpu_ram_layout->result_entropy1D[0] = 42;
+	//parent_gpu.ram->cpu_ram_layout->result_entropy1D[-1] = 42;
 
-	//cout<<ram.gpu_ram_layout->dofs_per_block<<" "<<ram.cpu_ram_layout->dofs_per_block<<endl;
+	//cout<<parent_gpu.ram->gpu_ram_layout->dofs_per_block<<" "<<parent_gpu.ram->cpu_ram_layout->dofs_per_block<<endl;
 
-	//ram.cpu_ram_layout->tmp_result_occupied_bins[0] = 1;
+	//parent_gpu.ram->cpu_ram_layout->tmp_result_occupied_bins[0] = 1;
 
 
-	for (unsigned int i = 0; i < ram.blocks.size() - 1; i++)
-	{	cout<<"Deploying Block "<<i+1<<" to RAM bank 1."<<endl;
-		ram.blocks[i].deploy(ram.cpu_ram_layout->dof_block_1);
-		//cout<<ram.cpu_ram_layout->result_entropy1D[-1]<<" "<<ram.cpu_ram_layout->result_entropy1D[0]<<endl<<endl;
-		for (unsigned int j = i + 1; j < ram.blocks.size(); j++)
-		{
-			cout<<ram.blocks[i].dof_id_start<<" "<<ram.blocks[i].dof_id_end<<" "<<ram.blocks[j].dof_id_start<<" "<<ram.blocks[j].dof_id_end<<endl;
-			cout<<"Deploy Block "<<j+1<<" to RAM bank 2."<<endl;
-			ram.blocks[j].deploy(ram.cpu_ram_layout->dof_block_2);
-			//cout<<ram.cpu_ram_layout->result_entropy1D[-1]<<" "<<ram.cpu_ram_layout->result_entropy1D[0]<<endl<<endl;
+	//for (unsigned int i = 0; i < parent_gpu.ram->blocks.size() - 1; i++)
+	//{	cout<<"Deploying Block "<<i+1<<" to RAM bank 1."<<endl;
+	//	parent_gpu.ram->blocks[i].deploy(parent_gpu.ram->cpu_ram_layout->dof_block_1);
+	//	//cout<<parent_gpu.ram->cpu_ram_layout->result_entropy1D[-1]<<" "<<parent_gpu.ram->cpu_ram_layout->result_entropy1D[0]<<endl<<endl;
+	//	for (unsigned int j = i + 1; j < parent_gpu.ram->blocks.size(); j++)
+	//	{
+	//		cout<<parent_gpu.ram->blocks[i].dof_id_start<<" "<<parent_gpu.ram->blocks[i].dof_id_end<<" "<<parent_gpu.ram->blocks[j].dof_id_start<<" "<<parent_gpu.ram->blocks[j].dof_id_end<<endl;
+	//		cout<<"Deploy Block "<<j+1<<" to RAM bank 2."<<endl;
+	//		parent_gpu.ram->blocks[j].deploy(parent_gpu.ram->cpu_ram_layout->dof_block_2);
+	//		//cout<<parent_gpu.ram->cpu_ram_layout->result_entropy1D[-1]<<" "<<parent_gpu.ram->cpu_ram_layout->result_entropy1D[0]<<endl<<endl;
 
-		}
-	}
+	//	}
+	//}
 
 	/*for(int i = 0; i<3*n_dihedrals + 3; i++)
 	{
-		ram.cpu_ram_layout->minima[i] = 0;
-		ram.cpu_ram_layout->maxima[i] = 0;
+		parent_gpu.ram->cpu_ram_layout->minima[i] = 0;
+		parent_gpu.ram->cpu_ram_layout->maxima[i] = 0;
 	}
-	ram.blocks[1].deploy(ram.cpu_ram_layout->dof_block_1);*/
+	parent_gpu.ram->blocks[1].deploy(parent_gpu.ram->cpu_ram_layout->dof_block_1);*/
 
 
-	//for(int i = 0; i<3*n_dihedrals + 3; i++) cout<<i<<" "<<ram.cpu_ram_layout->minima[i]<<" "<<ram.cpu_ram_layout->maxima[i]<<endl;
+	//for(int i = 0; i<3*n_dihedrals + 3; i++) cout<<i<<" "<<parent_gpu.ram->cpu_ram_layout->minima[i]<<" "<<parent_gpu.ram->cpu_ram_layout->maxima[i]<<endl;
 	//timings are written to stdout
     
     //write out the results to the binary .par file and measure time
     
-    if(write_PAR_body(&par_file, n_dihedrals, ram.cpu_ram_layout->result_entropy1D_b, ram.cpu_ram_layout->result_entropy1D_a, ram.cpu_ram_layout->result_entropy1D_d, 
-                        ram.cpu_ram_layout->result_entropy2D_bb, ram.cpu_ram_layout->result_entropy2D_ba, ram.cpu_ram_layout->result_entropy2D_bd, 
-                        ram.cpu_ram_layout->result_entropy2D_aa, ram.cpu_ram_layout->result_entropy2D_ad, ram.cpu_ram_layout->result_entropy2D_dd) !=0 ) {
+    if(write_PAR_body(&par_file, n_dihedrals, parent_gpu.ram->cpu_ram_layout->result_entropy1D_b, parent_gpu.ram->cpu_ram_layout->result_entropy1D_a, parent_gpu.ram->cpu_ram_layout->result_entropy1D_d, 
+                        parent_gpu.ram->cpu_ram_layout->result_entropy2D_bb, parent_gpu.ram->cpu_ram_layout->result_entropy2D_ba, parent_gpu.ram->cpu_ram_layout->result_entropy2D_bd, 
+                        parent_gpu.ram->cpu_ram_layout->result_entropy2D_aa, parent_gpu.ram->cpu_ram_layout->result_entropy2D_ad, parent_gpu.ram->cpu_ram_layout->result_entropy2D_dd) !=0 ) {
         cerr<<"AN ERROR HAS OCCURED WHILE WRITING THE FILE " <<getCmdOption(argv, argv+argc, "-o")<<" .\n";
         exit(EXIT_FAILURE);
     }
@@ -821,7 +874,7 @@ int main(int argc, char *argv[]){
 	gettimeofday (&tv_end, NULL);
 	cout<<endl<<endl;
 	cout<<"Total execution time: "<<tv_end.tv_sec+1e-6 * tv_end.tv_usec-tv_start.tv_sec-1e-6 * tv_start.tv_usec<<endl;
- 	cout<<"PROGRAM FINISHED SUCCESSFULLY."<<endl<<endl<<endl;
+ 	cout<<"PROGRAM FINISHED SUCCESSFULLYy."<<endl<<endl<<endl;
 	
 	cudaDeviceReset();
 	return 0;
