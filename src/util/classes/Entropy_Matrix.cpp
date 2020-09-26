@@ -393,7 +393,7 @@ void Entropy_Matrix::set2DEntropy(int type1, int type2, unsigned int index1, uns
     int smaller,bigger,index;
     index1--;
     index2--;
-    if((index1>=0)&&(index2>=0)&&(value>=0)){    
+    if((index1>=0)&&(index2>=0)){    
 			if((type1==TYPE_B)&&(type2==TYPE_B)&&(index1!=index2)&&(index1<nBonds)&&(index2<nBonds)) { // for 2D entropy of two different bonds
 					smaller=index1<index2?index1:index2;
 					bigger=index1<index2?index2:index1;
@@ -669,17 +669,6 @@ void Entropy_Matrix::read_BAT_header() {
     int version;
     int fail=0;
     char dummystring[31];
-
-    //~ infile.read((char*)&version, sizeof(int)); //first read the .par version number as an integer
-    //~ infile.read((char*)&double_prec, sizeof(int));//then read an integer declaring if the trajectory was stored in double precision (-1 means unknown)
-    //~ infile.read((char*)&nDihedrals,sizeof(int));//read an integer containing the number of dihedrals
-    //~ infile.read((char*)&numFrames,sizeof(int));//and an integer containing the number of frames of the trajectory used for calculation
-    //~ infile.read((char*)&bDens1D,sizeof(int)); //read the used number of bins for 1D histograms
-    //~ infile.read((char*)&aDens1D,sizeof(int));
-    //~ infile.read((char*)&dDens1D,sizeof(int));
-    //~ infile.read((char*)&bDens,sizeof(int)); //and the used number of bins for 2D histograms
-    //~ infile.read((char*)&aDens,sizeof(int));
-    //~ infile.read((char*)&dDens,sizeof(int));
 
     infile.read((char*)&version, sizeof(int)); //first read the .bat version number as an integer
     fail=fail | (infile.rdstate() & std::ifstream::failbit);
