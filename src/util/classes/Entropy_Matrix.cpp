@@ -1,4 +1,4 @@
-//    The class code for handling an EntropyMatrix from a .par file of the PARENT suite 
+//    The class code for handling an Entropy_Matrix from a .par file of the PARENT suite 
 //    Copyright (C) 2016  Markus Fleck (member of the laboratory of Bojan Zagrovic, University of Vienna)
 //
 //    This program is free software: you can redistribute it and/or modify
@@ -32,8 +32,8 @@
 
 #include <iostream>
 
-#include "EntropyMatrix.h"
-#include "MyError.cpp"
+#include "Entropy_Matrix.h"
+#include "My_Error.cpp"
 #include "../types.h"
 
 
@@ -43,13 +43,13 @@
 using namespace std;
 
 
-EntropyMatrix::EntropyMatrix(char const * infileInput){
+Entropy_Matrix::Entropy_Matrix(char const * infileInput){
   infile.exceptions(std::ifstream::badbit);
   infile.open(infileInput, ios::binary | ios::out);//open the .par file;
   if(!infile.good())
     {
-      MyError myError((string("ERROR OPENING FILE ")+string(infileInput)+string("! ABORTING.\n")).c_str());
-      throw myError;
+      My_Error my_error((string("ERROR OPENING FILE ")+string(infileInput)+string("! ABORTING.\n")).c_str());
+      throw my_error;
     }
   infile.exceptions(std::ifstream::badbit | std::ifstream::failbit | std::ifstream::eofbit);
   
@@ -57,13 +57,13 @@ EntropyMatrix::EntropyMatrix(char const * infileInput){
   try{
     read_PAR_header();
   }
-  catch(MyError myError)
+  catch(My_Error my_error)
   {
-    throw myError;
+    throw my_error;
   }
   catch(...){
-      MyError myError((string("ERROR WHILE READING THE HEADER OF THE FILE ")+string(infileInput)+string("! ABORTING.")).c_str());
-      throw myError;    
+      My_Error my_error((string("ERROR WHILE READING THE HEADER OF THE FILE ")+string(infileInput)+string("! ABORTING.")).c_str());
+      throw my_error;    
   }
   
   nBonds=nDihedrals+2;
@@ -72,21 +72,21 @@ EntropyMatrix::EntropyMatrix(char const * infileInput){
   try{
     read_PAR_body();
   }
-  catch(MyError myError)
+  catch(My_Error my_error)
   {
-    throw myError;
+    throw my_error;
   }
   catch(...){
-      MyError myError((string("ERROR WHILE READING THE BODY OF THE FILE ")+string(infileInput)+string("! ABORTING.")).c_str());
-      throw myError;    
+      My_Error my_error((string("ERROR WHILE READING THE BODY OF THE FILE ")+string(infileInput)+string("! ABORTING.")).c_str());
+      throw my_error;    
   }
   
 }
 
 
 
-//to create a blank EntropyMatrix with nAtoms atoms
-EntropyMatrix::EntropyMatrix(unsigned int nAtoms){
+//to create a blank Entropy_Matrix with nAtoms atoms
+Entropy_Matrix::Entropy_Matrix(unsigned int nAtoms){
   
   nBonds=nAtoms-1;
   nAngles=nAtoms-2;
@@ -94,21 +94,21 @@ EntropyMatrix::EntropyMatrix(unsigned int nAtoms){
 
 
   bondsEntropy1D = new double[nBonds]; // allocate storage for reading the .par file
-  anglesEntropy1D=new double[nAngles];
-  dihedralsEntropy1D=new double[nDihedrals];
-  bbEntropy=new double[nBonds*(nBonds-1)/2];
-  baEntropy=new double[nBonds*nAngles];
-  bdEntropy=new double[nBonds*nDihedrals];
-  aaEntropy=new double[nAngles*(nAngles-1)/2];
-  adEntropy=new double[nAngles*nDihedrals];
-  ddEntropy=new double[nDihedrals*(nDihedrals-1)/2];
+  anglesEntropy1D = new double[nAngles];
+  dihedralsEntropy1D = new double[nDihedrals];
+  bbEntropy = new double[nBonds*(nBonds-1)/2];
+  baEntropy = new double[nBonds*nAngles];
+  bdEntropy = new double[nBonds*nDihedrals];
+  aaEntropy = new double[nAngles*(nAngles-1)/2];
+  adEntropy = new double[nAngles*nDihedrals];
+  ddEntropy = new double[nDihedrals*(nDihedrals-1)/2];
 
   if(!((bondsEntropy1D!=NULL)&&(anglesEntropy1D!=NULL)&&(dihedralsEntropy1D!=NULL)&&(bbEntropy!=NULL)&&(baEntropy!=NULL)&&(bdEntropy!=NULL)&&(aaEntropy!=NULL)&&(adEntropy!=NULL)&&(ddEntropy!=NULL))) {
-      MyError myError("ERROR: ALLOCATION FOR PAR FILE BODY FAILED. MORE MEMORY NEEDED?");
-      throw myError;
+      My_Error my_error("ERROR: ALLOCATION FOR PAR FILE BODY FAILED. MORE MEMORY NEEDED?");
+      throw my_error;
   }
   
-  double_prec=-1; //set the precision of the .bat file which underlies this .par file (EntropyMatrix) to "unknown"
+  double_prec=-1; //set the precision of the .bat file which underlies this .par file (Entropy_Matrix) to "unknown"
   numFrames=0; //initialize the number of frames of the underlying .bat trajectory to 0, indicating unknown
   version=4; //probably unnecessary
   bDens1D=0; // and initialized all the used bins with 0
@@ -130,8 +130,61 @@ EntropyMatrix::EntropyMatrix(unsigned int nAtoms){
     }
 }
 
+Entropy_Matrix::Entropy_Matrix(char const * bat_file, double* storage, unsigned int n_bins){
+        
+        
 
-EntropyMatrix::~EntropyMatrix(){
+
+    infile.exceptions(std::ifstream::badbit);
+    infile.open(bat_file, ios::binary | ios::out);//open the .par file;
+    if(!infile.good())
+    {
+        My_Error my_error((string("ERROR OPENING FILE ")+string(bat_file)+string("! ABORTING.\n")).c_str());
+        throw my_error;
+    }
+    infile.exceptions(std::ifstream::badbit | std::ifstream::failbit | std::ifstream::eofbit);
+      
+
+      
+    try{
+        read_BAT_header();
+    }
+    catch(My_Error my_error)
+    {
+        throw my_error;
+    }
+    catch(...){
+        My_Error my_error((string("ERROR WHILE READING THE HEADER OF THE FILE ")+string(bat_file)+string("! ABORTING.")).c_str());
+        throw my_error;    
+    }
+      
+    nBonds=nDihedrals+2;
+    nAngles=nDihedrals+1;
+
+    bondsEntropy1D = storage; 
+    anglesEntropy1D = bondsEntropy1D + nBonds;
+    dihedralsEntropy1D = anglesEntropy1D + nAngles;
+    bbEntropy = dihedralsEntropy1D + nDihedrals;
+    baEntropy = bbEntropy + (nBonds - 1) * nBonds / 2;
+    bdEntropy = baEntropy + nBonds * nAngles;  
+    aaEntropy = bdEntropy + nBonds * nDihedrals;
+    adEntropy = aaEntropy + (nAngles - 1) * nAngles / 2;
+    ddEntropy = adEntropy + nAngles * nDihedrals;
+    
+    
+    
+    bDens1D = n_bins;
+    aDens1D = n_bins;
+    dDens1D = n_bins;
+    bDens = n_bins;
+    aDens = n_bins;
+    dDens = n_bins;
+    version=4; //probably unnecessary
+  
+}
+
+
+Entropy_Matrix::~Entropy_Matrix(){
   
   delete[] bondsEntropy1D; //deallocate storage for reading the .par file
   delete[] anglesEntropy1D;
@@ -152,13 +205,13 @@ EntropyMatrix::~EntropyMatrix(){
 }
 
 
-void EntropyMatrix::write(char const * outfileInput){
+void Entropy_Matrix::write(char const * outfileInput){
   outfile.exceptions(std::ofstream::badbit);
   outfile.open(outfileInput, ios::binary | ios::out);//open the .par file
 	if(!outfile.good())
     {
-      MyError myError((string("ERROR OPENING FILE ")+string(outfileInput)+string("! ABORTING.\n")).c_str());
-      throw myError;
+      My_Error my_error((string("ERROR OPENING FILE ")+string(outfileInput)+string("! ABORTING.\n")).c_str());
+      throw my_error;
     }
     outfile.exceptions(std::ofstream::badbit | std::ofstream::failbit | std::ofstream::eofbit);
   
@@ -167,26 +220,26 @@ void EntropyMatrix::write(char const * outfileInput){
   try{
     write_PAR_header();
   }
-  catch(MyError myError)
+  catch(My_Error my_error)
   {
-    throw myError;
+    throw my_error;
   }
   catch(...){
-      MyError myError((string("ERROR WHILE WRITING THE HEADER OF THE FILE ")+string(outfileInput)+string("! ABORTING.")).c_str());
-      throw myError;    
+      My_Error my_error((string("ERROR WHILE WRITING THE HEADER OF THE FILE ")+string(outfileInput)+string("! ABORTING.")).c_str());
+      throw my_error;    
   }
   
     
   try{
     write_PAR_body();
   }
-  catch(MyError myError)
+  catch(My_Error my_error)
   {
-    throw myError;
+    throw my_error;
   }
   catch(...){
-    MyError myError((string("ERROR WRITING THE BODY OF THE FILE ")+string(outfileInput)+string("! ABORTING.")).c_str());
-    throw myError;    
+    My_Error my_error((string("ERROR WRITING THE BODY OF THE FILE ")+string(outfileInput)+string("! ABORTING.")).c_str());
+    throw my_error;    
   }
 	
 		outfile.close();
@@ -195,7 +248,7 @@ void EntropyMatrix::write(char const * outfileInput){
 
 
 //to get 1D entropies 
-double EntropyMatrix::getEntropy(int type, unsigned int index) {
+double Entropy_Matrix::getEntropy(int type, unsigned int index) {
     if(index>0){
 			if((type==TYPE_B)&&(index<=nBonds)) {
 					return bondsEntropy1D[index-1];
@@ -212,7 +265,7 @@ double EntropyMatrix::getEntropy(int type, unsigned int index) {
 
 
 //to get 2D entropy values 
-double EntropyMatrix::get2DEntropy(int type1,int type2,unsigned int index1, unsigned int index2) {
+double Entropy_Matrix::get2DEntropy(int type1,int type2,unsigned int index1, unsigned int index2) {
     int smaller,bigger,index;
     index1--;
     index2--;
@@ -259,7 +312,7 @@ double EntropyMatrix::get2DEntropy(int type1,int type2,unsigned int index1, unsi
 
 
 //to get mutual information values
-double EntropyMatrix::getMutual(int type1,int type2,unsigned int index1, unsigned int index2) {
+double Entropy_Matrix::getMutual(int type1,int type2,unsigned int index1, unsigned int index2) {
     int smaller,bigger,index;
     index1--;
     index2--;
@@ -305,7 +358,7 @@ double EntropyMatrix::getMutual(int type1,int type2,unsigned int index1, unsigne
 }
 
 //to set 1D entropies 
-void EntropyMatrix::setEntropy(int type, unsigned int index, double value) {
+void Entropy_Matrix::setEntropy(int type, unsigned int index, double value) {
     if(index>0){
 			if((type==TYPE_B)&&(index<=nBonds)) {
 					bondsEntropy1D[index-1]=value;
@@ -319,8 +372,24 @@ void EntropyMatrix::setEntropy(int type, unsigned int index, double value) {
 	}
 }
 
+//to set 1D entropies. This function accepts the global index, i. e from 0 to 3 * n_dihedrals + 2 
+void Entropy_Matrix::setEntropy(unsigned int dof_id, double value) {
+    switch(get_dof_type_from_id(dof_id, nDihedrals)){
+        case TYPE_B:
+            bondsEntropy1D[dof_id] = value;
+        break;
+        case TYPE_A:
+            anglesEntropy1D[dof_id - nBonds] = value;
+        break;
+        case TYPE_D:
+            dihedralsEntropy1D[dof_id - nBonds - nAngles] = value;
+        break;
+    
+    }
+}
+
 //to set 2D entropy values 
-void EntropyMatrix::set2DEntropy(int type1,int type2, unsigned int index1, unsigned int index2, double value) {
+void Entropy_Matrix::set2DEntropy(int type1, int type2, unsigned int index1, unsigned int index2, double value) {
     int smaller,bigger,index;
     index1--;
     index2--;
@@ -366,7 +435,7 @@ void EntropyMatrix::set2DEntropy(int type1,int type2, unsigned int index1, unsig
 
 
 //to set mutual information values by changing 2D entropy values, without modyfing 2D entropy values
-void EntropyMatrix::setMutual(int type1,int type2,unsigned int index1, unsigned int index2, double value) {
+void Entropy_Matrix::setMutual(int type1,int type2,unsigned int index1, unsigned int index2, double value) {
     int smaller,bigger,index;
     index1--;
     index2--;
@@ -410,7 +479,7 @@ void EntropyMatrix::setMutual(int type1,int type2,unsigned int index1, unsigned 
 		}
 }
 
-void EntropyMatrix::write_PAR_header() {
+void Entropy_Matrix::write_PAR_header() {
     int dummy=dihedrals_top.size();
     int myversion=4;
     char dummystring[31];
@@ -462,7 +531,7 @@ void EntropyMatrix::write_PAR_header() {
 
 
 
-void EntropyMatrix::read_PAR_header() {
+void Entropy_Matrix::read_PAR_header() {
     char dummystring[31];
 
     infile.read((char*)&version, sizeof(int)); //first read the .par version number as an integer
@@ -478,47 +547,47 @@ void EntropyMatrix::read_PAR_header() {
 
 
     if(version<0) {
-        MyError myError((string("ERROR: FILE HEADER CORRUPTED. VERSION NUMBER (")+to_string(version)+string(") < 0! ABORTING.")).c_str());
-        throw myError;
+        My_Error my_error((string("ERROR: FILE HEADER CORRUPTED. VERSION NUMBER (")+to_string(version)+string(") < 0! ABORTING.")).c_str());
+        throw my_error;
     }
     if((double_prec!=0)&&(double_prec!=1)&&(double_prec!=-1)) {
-        MyError myError((string("ERROR: FILE HEADER CORRUPTED. DOUBLE PRECISION VALUE (")+to_string(double_prec)+string(") NEITHER 0, 1 NOR -1! ABORTING.")).c_str());
-        throw myError;
+        My_Error my_error((string("ERROR: FILE HEADER CORRUPTED. DOUBLE PRECISION VALUE (")+to_string(double_prec)+string(") NEITHER 0, 1 NOR -1! ABORTING.")).c_str());
+        throw my_error;
     }
     if(nDihedrals>19997) {
         cerr<<"WARNING: "<<nDihedrals+3<<" ATOMS DECLARED IN THE FILE HEADER (CORRUPTED?). THIS WILL LEAD TO LARGE OUTPUT."<<endl;
     }
     if(nDihedrals<0) {
-        MyError myError((string("ERROR: FILE HEADER CORRUPTED. NUMBER OF DIHEDRALS (")+to_string(nDihedrals)+string(") < 0! ABORTING.")).c_str());
-        throw myError;
+        My_Error my_error((string("ERROR: FILE HEADER CORRUPTED. NUMBER OF DIHEDRALS (")+to_string(nDihedrals)+string(") < 0! ABORTING.")).c_str());
+        throw my_error;
     }
     if(numFrames<0) {
-        MyError myError((string("ERROR: FILE HEADER CORRUPTED. NUMBER OF FRAMES (")+to_string(numFrames)+string(") < 0! ABORTING.")).c_str());
-        throw myError;
+        My_Error my_error((string("ERROR: FILE HEADER CORRUPTED. NUMBER OF FRAMES (")+to_string(numFrames)+string(") < 0! ABORTING.")).c_str());
+        throw my_error;
     }
     if(bDens1D<1) {
-        MyError myError((string("ERROR: FILE HEADER CORRUPTED. NUMBER BINS FOR BONDS IN 1D (")+to_string(bDens1D)+string(") < 1! ABORTING.")).c_str());
-        throw myError;
+        My_Error my_error((string("ERROR: FILE HEADER CORRUPTED. NUMBER BINS FOR BONDS IN 1D (")+to_string(bDens1D)+string(") < 1! ABORTING.")).c_str());
+        throw my_error;
     }
     if(aDens1D<1) {
-        MyError myError((string("ERROR: FILE HEADER CORRUPTED. NUMBER BINS FOR ANGLES IN 1D (")+to_string(aDens1D)+string(") < 1! ABORTING.")).c_str());
-        throw myError;
+        My_Error my_error((string("ERROR: FILE HEADER CORRUPTED. NUMBER BINS FOR ANGLES IN 1D (")+to_string(aDens1D)+string(") < 1! ABORTING.")).c_str());
+        throw my_error;
     }
     if(dDens1D<1) {
-        MyError myError((string("ERROR: FILE HEADER CORRUPTED. NUMBER BINS FOR DIHEDRALS IN 1D (")+to_string(dDens1D)+string(") < 1! ABORTING.")).c_str());
-        throw myError;
+        My_Error my_error((string("ERROR: FILE HEADER CORRUPTED. NUMBER BINS FOR DIHEDRALS IN 1D (")+to_string(dDens1D)+string(") < 1! ABORTING.")).c_str());
+        throw my_error;
     }
     if(bDens<1) {
-        MyError myError((string("ERROR: FILE HEADER CORRUPTED. NUMBER BINS FOR BONDS IN 2D (")+to_string(bDens)+string(") < 1! ABORTING.")).c_str());
-        throw myError;
+        My_Error my_error((string("ERROR: FILE HEADER CORRUPTED. NUMBER BINS FOR BONDS IN 2D (")+to_string(bDens)+string(") < 1! ABORTING.")).c_str());
+        throw my_error;
     }
     if(aDens<1) {
-        MyError myError((string("ERROR: FILE HEADER CORRUPTED. NUMBER BINS FOR ANGLES IN 2D (")+to_string(aDens)+string(") < 1! ABORTING.")).c_str());
-        throw myError;
+        My_Error my_error((string("ERROR: FILE HEADER CORRUPTED. NUMBER BINS FOR ANGLES IN 2D (")+to_string(aDens)+string(") < 1! ABORTING.")).c_str());
+        throw my_error;
     }
     if(dDens<1) {
-        MyError myError((string("ERROR: FILE HEADER CORRUPTED. NUMBER BINS FOR DIHEDRALS IN 2D (")+to_string(dDens)+string(") < 1! ABORTING.")).c_str());
-        throw myError;
+        My_Error my_error((string("ERROR: FILE HEADER CORRUPTED. NUMBER BINS FOR DIHEDRALS IN 2D (")+to_string(dDens)+string(") < 1! ABORTING.")).c_str());
+        throw my_error;
     }
 		
 		
@@ -549,33 +618,33 @@ void EntropyMatrix::read_PAR_header() {
         dihedrals_top.push_back(dummyvec);
         infile.read((char*)&(dihedrals_top[i][0]),sizeof(int));//write the atomnumber of the first atom
         if(dihedrals_top[i][0]<1) {
-          MyError myError("ERROR: FILE HEADER CORRUPTED. DIHEDRAL ID < 1 !");
-          throw myError;          
+          My_Error my_error("ERROR: FILE HEADER CORRUPTED. DIHEDRAL ID < 1 !");
+          throw my_error;          
         }
         infile.read((char*)&(dihedrals_top[i][1]),sizeof(int));//second atom
         if(dihedrals_top[i][1]<1) {
-          MyError myError("ERROR: FILE HEADER CORRUPTED. DIHEDRAL ID < 1 !");
-          throw myError;   
+          My_Error my_error("ERROR: FILE HEADER CORRUPTED. DIHEDRAL ID < 1 !");
+          throw my_error;   
         }
         infile.read((char*)&(dihedrals_top[i][2]),sizeof(int));//third atom
         if(dihedrals_top[i][2]<1) {
-          MyError myError("ERROR: FILE HEADER CORRUPTED. DIHEDRAL ID < 1 !");
-          throw myError;   
+          My_Error my_error("ERROR: FILE HEADER CORRUPTED. DIHEDRAL ID < 1 !");
+          throw my_error;   
         }
         infile.read((char*)&(dihedrals_top[i][3]),sizeof(int));//fourth atom
         if(dihedrals_top[i][3]<1) {
-          MyError myError("ERROR: FILE HEADER CORRUPTED. DIHEDRAL ID < 1 !");
-          throw myError;   
+          My_Error my_error("ERROR: FILE HEADER CORRUPTED. DIHEDRAL ID < 1 !");
+          throw my_error;   
         }
         infile.read((char*)&(dihedrals_top[i][4]),sizeof(int));// an integer containing the type of the dihedral(physical=0,pseudo=1,improper=-1)
         if(!((dihedrals_top[i][4]==1)||(dihedrals_top[i][4]==0)||(dihedrals_top[i][4]==-1))) {
-          MyError myError("ERROR: FILE HEADER CORRUPTED. DIHEDRAL TYPE NEITHER 0, 1 NOR -1 !");
-          throw myError;   
+          My_Error my_error("ERROR: FILE HEADER CORRUPTED. DIHEDRAL TYPE NEITHER 0, 1 NOR -1 !");
+          throw my_error;   
         }
         infile.read((char*)&(dihedrals_top[i][5]),sizeof(int));// and an integer containing the "parent" dihedral(for phaseangles, -1 if no "parent")
         if(dihedrals_top[i][5]<-1) {
-          MyError myError("ERROR: FILE HEADER CORRUPTED. DIHEDRAL IS PHASEANGLE OF A DIHEDRAL WITH NEGATIVE ID !");
-          throw myError;   
+          My_Error my_error("ERROR: FILE HEADER CORRUPTED. DIHEDRAL IS PHASEANGLE OF A DIHEDRAL WITH NEGATIVE ID !");
+          throw my_error;   
         }
 
         if((version==1)&&(dihedrals_top[i][5]!=-1)) {
@@ -589,7 +658,131 @@ void EntropyMatrix::read_PAR_header() {
 
 }
 
-void EntropyMatrix::write_PAR_body() {
+
+
+
+
+
+//to read the header of the binary .bat file
+//~ int read_BAT_header(ifstream *infile,int *double_prec,int *numFrames,vector< vector <int> > *dihedrals_top, vector <float>  *masses, vector <string> *residues,vector <int> *residueNumbers,vector <string> *atomNames,vector <string> *belongsToMolecule) {
+void Entropy_Matrix::read_BAT_header() {
+    int version;
+    int fail=0;
+    char dummystring[31];
+
+    //~ infile.read((char*)&version, sizeof(int)); //first read the .par version number as an integer
+    //~ infile.read((char*)&double_prec, sizeof(int));//then read an integer declaring if the trajectory was stored in double precision (-1 means unknown)
+    //~ infile.read((char*)&nDihedrals,sizeof(int));//read an integer containing the number of dihedrals
+    //~ infile.read((char*)&numFrames,sizeof(int));//and an integer containing the number of frames of the trajectory used for calculation
+    //~ infile.read((char*)&bDens1D,sizeof(int)); //read the used number of bins for 1D histograms
+    //~ infile.read((char*)&aDens1D,sizeof(int));
+    //~ infile.read((char*)&dDens1D,sizeof(int));
+    //~ infile.read((char*)&bDens,sizeof(int)); //and the used number of bins for 2D histograms
+    //~ infile.read((char*)&aDens,sizeof(int));
+    //~ infile.read((char*)&dDens,sizeof(int));
+
+    infile.read((char*)&version, sizeof(int)); //first read the .bat version number as an integer
+    fail=fail | (infile.rdstate() & std::ifstream::failbit);
+    infile.read((char*)&double_prec, sizeof(int)); //then read an integer declaring if the trajectory is stored in double precision
+    fail=fail | (infile.rdstate() & std::ifstream::failbit);
+    infile.read((char*)&nDihedrals,sizeof(int));//read an integer containing the number of dihedrals
+    fail=fail | (infile.rdstate() & std::ifstream::failbit);
+    infile.read((char*)&numFrames,sizeof(int)); //and an integer containing the number of frames
+    fail=fail | (infile.rdstate() & std::ifstream::failbit);
+
+
+    if(version<0) {
+        ostringstream oss;
+        oss <<"ERROR: FILE HEADER CORRUPTED. VERSION NUMBER ("<<version<<") < 0!";
+        My_Error my_error(oss.str());
+        throw my_error;
+    }
+    if((double_prec!=0) && (double_prec!=1)) {
+        ostringstream oss;
+        oss <<"ERROR: FILE HEADER CORRUPTED. DOUBLE PRECISION VALUE ("<<double_prec<<") NEITHER 0 NOR 1!";
+        My_Error my_error(oss.str());
+        throw my_error;
+    }
+    if(nDihedrals>19997) {
+        cerr << "WARNING: "<<nDihedrals+3<<" ATOMS DECLARED IN THE FILE HEADER (CORRUPTED?). THIS WILL LEAD TO LARGE OUTPUT."<<endl;
+    }
+    if(nDihedrals<0) {
+        ostringstream oss;
+        oss <<"ERROR: FILE HEADER CORRUPTED. NUMBER OF DIHEDRALS ("<<nDihedrals<<") < 0!";
+        My_Error my_error(oss.str());
+        throw my_error;
+    }
+    if(numFrames<1) {
+        ostringstream oss;
+        oss <<"ERROR: FILE HEADER CORRUPTED. NUMBER OF FRAMES ("<<numFrames<<") < 1!";
+        My_Error my_error(oss.str());
+        throw my_error;
+    }
+    
+
+    if (version>=3) {
+        for(unsigned int i=0; i<nDihedrals+3; i++) { //for ever atom in the system
+            infile.read(dummystring, 8*sizeof(char));//read the name of the residue it belongs to
+            residues.push_back(dummystring);
+            fail=fail | (infile.rdstate() & std::ifstream::failbit);
+            residueNumbers.push_back(0);
+            infile.read((char*)&(residueNumbers[i]), sizeof(float));//read the number of the residue it belongs to
+            fail=fail | (infile.rdstate() & std::ifstream::failbit);
+            infile.read(dummystring, 8*sizeof(char));//read the name of the atom
+            atomNames.push_back(dummystring);
+            fail=fail | (infile.rdstate() & std::ifstream::failbit);
+            infile.read(dummystring, 31*sizeof(char));//read the molecule of the residue it belongs to
+            belongsToMolecule.push_back(dummystring);
+            fail=fail | (infile.rdstate() & std::ifstream::failbit);
+        }
+    }
+
+
+
+    vector<int>dummyvec;
+    dummyvec.push_back(0);
+    dummyvec.push_back(0);
+    dummyvec.push_back(0);
+    dummyvec.push_back(0);
+    dummyvec.push_back(0);
+    dummyvec.push_back(0);
+    for(unsigned int i=0; i<nDihedrals; i++) {//then for all dihedrals
+        dihedrals_top.push_back(dummyvec);
+        infile.read((char*)&(dihedrals_top[i][0]),sizeof(int));//read the atomnumber of the first atom
+        fail=fail | (infile.rdstate() & std::ifstream::failbit);
+        infile.read((char*)&(dihedrals_top[i][1]),sizeof(int));//second atom
+        fail=fail | (infile.rdstate() & std::ifstream::failbit);
+        infile.read((char*)&(dihedrals_top[i][2]),sizeof(int));//third atom
+        fail=fail | (infile.rdstate() & std::ifstream::failbit);
+        infile.read((char*)&(dihedrals_top[i][3]),sizeof(int));//fourth atom
+        fail=fail | (infile.rdstate() & std::ifstream::failbit);
+        infile.read((char*)&(dihedrals_top[i][4]),sizeof(int));//an integer containing the type of the dihedral(physical=0,pseudo=1,improper=-1)
+        fail=fail | (infile.rdstate() & std::ifstream::failbit);
+        infile.read((char*)&(dihedrals_top[i][5]),sizeof(int));//and an integer containing the "parent"dihedral(for phaseangles, -1 if no "parent")
+        fail=fail | (infile.rdstate() & std::ifstream::failbit);
+    }
+    for(unsigned int i=0; i<nDihedrals+3; i++) { //and read the whole massestor of the atoms in the system in single precision (float)
+        masses.push_back(0);
+        infile.read((char*)&(masses[i]), sizeof(float));
+        fail=fail | (infile.rdstate() & std::ifstream::failbit);
+    }
+    
+    bat_file_dofs_begin = infile.tellg();
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+void Entropy_Matrix::write_PAR_body() {
 
     int nBonds=nDihedrals+2;
     int nAngles=nDihedrals+1;
@@ -605,7 +798,7 @@ void EntropyMatrix::write_PAR_body() {
     outfile.write((char*)ddEntropy, nDihedrals*(nDihedrals-1)/2*sizeof(double)); //write the 2D dihedrlas-dihedrals half-matrix as an array
 }
 
-void EntropyMatrix::read_PAR_body() {
+void Entropy_Matrix::read_PAR_body() {
 
     int nBonds=nDihedrals+2;
     int nAngles=nDihedrals+1;
@@ -621,8 +814,8 @@ void EntropyMatrix::read_PAR_body() {
     ddEntropy=new double[nDihedrals*(nDihedrals-1)/2];
 
     if(!((bondsEntropy1D!=NULL)&&(anglesEntropy1D!=NULL)&&(dihedralsEntropy1D!=NULL)&&(bbEntropy!=NULL)&&(baEntropy!=NULL)&&(bdEntropy!=NULL)&&(aaEntropy!=NULL)&&(adEntropy!=NULL)&&(ddEntropy!=NULL))) {
-        MyError myError("ERROR: ALLOCATION FOR PAR FILE BODY FAILED. MORE MEMORY NEEDED?");
-        throw myError;
+        My_Error my_error("ERROR: ALLOCATION FOR PAR FILE BODY FAILED. MORE MEMORY NEEDED?");
+        throw my_error;
     }
 
     infile.read((char*)bondsEntropy1D, nBonds*sizeof(double)); // and the actually reads it in (see write_PAR_body for details)
@@ -636,26 +829,26 @@ void EntropyMatrix::read_PAR_body() {
     infile.read((char*)ddEntropy, nDihedrals*(nDihedrals-1)/2*sizeof(double));
 }
 
-unsigned int EntropyMatrix::getNBonds(){
+unsigned int Entropy_Matrix::getNBonds(){
   return nBonds;
 }
 
 
-unsigned int EntropyMatrix::getNAngles(){
+unsigned int Entropy_Matrix::getNAngles(){
   return nAngles;
 }
 
-unsigned int EntropyMatrix::getNDihedrals(){
+unsigned int Entropy_Matrix::getNDihedrals(){
   return nDihedrals;
 }
 
 
  
 //get the name of the residue of the atom with the according number (atomnumbers start at 1)
-string EntropyMatrix::getResidueName(unsigned int atomNumber){
+string Entropy_Matrix::getResidueName(unsigned int atomNumber){
 	if((atomNumber<1)||(atomNumber>residues.size())){		
-		MyError myError(string("ERROR: REQUEST FOR THE RESIDUENAME OF AN ATOM WITH AN INDEX WHICH IS OUT OF RANGE (")+to_string(atomNumber)+string(").").c_str());
-		throw myError;
+		My_Error my_error(string("ERROR: REQUEST FOR THE RESIDUENAME OF AN ATOM WITH AN INDEX WHICH IS OUT OF RANGE (")+to_string(atomNumber)+string(").").c_str());
+		throw my_error;
 	}
 	return residues[atomNumber-1];
 }
@@ -663,30 +856,30 @@ string EntropyMatrix::getResidueName(unsigned int atomNumber){
 
 
 //get the name of the residue of the atom with the according number (atomnumbers start at 1)
-int EntropyMatrix::getResidueNumber(unsigned int atomNumber){
+int Entropy_Matrix::getResidueNumber(unsigned int atomNumber){
 	if((atomNumber<1)||(atomNumber>residues.size())){		
-		MyError myError(string("ERROR: REQUEST FOR THE RESIDUENUMBER OF AN ATOM WITH AN INDEX WHICH IS OUT OF RANGE (")+to_string(atomNumber)+string(").").c_str());
-		throw myError;
+		My_Error my_error(string("ERROR: REQUEST FOR THE RESIDUENUMBER OF AN ATOM WITH AN INDEX WHICH IS OUT OF RANGE (")+to_string(atomNumber)+string(").").c_str());
+		throw my_error;
 	}
 	return residueNumbers[atomNumber-1];	
 }
 
 
 //get the name of the residue of the atom with the according number (atomnumbers start at 1)
-string EntropyMatrix::getAtomName(unsigned int atomNumber){
+string Entropy_Matrix::getAtomName(unsigned int atomNumber){
 	if((atomNumber<1)||(atomNumber>residues.size())){		
-		MyError myError(string("ERROR: REQUEST FOR THE NAME OF AN ATOM WITH AN INDEX WHICH IS OUT OF RANGE (")+to_string(atomNumber)+string(").").c_str());
-		throw myError;
+		My_Error my_error(string("ERROR: REQUEST FOR THE NAME OF AN ATOM WITH AN INDEX WHICH IS OUT OF RANGE (")+to_string(atomNumber)+string(").").c_str());
+		throw my_error;
 	}
 	return atomNames[atomNumber-1];	
 }
 
 
 //get the name of the residue of the atom with the according number (atomnumbers start at 1)
-string EntropyMatrix::getMoleculeName(unsigned int atomNumber){
+string Entropy_Matrix::getMoleculeName(unsigned int atomNumber){
 	if((atomNumber<1)||(atomNumber>residues.size())){		
-		MyError myError(string("ERROR: REQUEST FOR THE ASSOCIATED MOLECULENAME OF AN ATOM WITH AN INDEX WHICH IS OUT OF RANGE (")+to_string(atomNumber)+string(").").c_str());
-		throw myError;
+		My_Error my_error(string("ERROR: REQUEST FOR THE ASSOCIATED MOLECULENAME OF AN ATOM WITH AN INDEX WHICH IS OUT OF RANGE (")+to_string(atomNumber)+string(").").c_str());
+		throw my_error;
 	}
 	return belongsToMolecule[atomNumber-1];	
 }
@@ -694,27 +887,27 @@ string EntropyMatrix::getMoleculeName(unsigned int atomNumber){
 
 
 //returns the atomnumber of an atom in a given dihedral, e.g. getDihedralAtom(727,3) gives the number of the third atom in dihedral 727 (all indices start at 1)
-int EntropyMatrix::getDihedralAtom(unsigned int dihedralNumber, unsigned int atom){
+int Entropy_Matrix::getDihedralAtom(unsigned int dihedralNumber, unsigned int atom){
 	if((dihedralNumber<1)||(dihedralNumber>dihedrals_top.size())){		
-		MyError myError(string("ERROR: REQUEST FOR A DIHEDRAL NUMBER OUT OF RANGE (")+to_string(dihedralNumber)+string(").").c_str());
-		throw myError;
+		My_Error my_error(string("ERROR: REQUEST FOR A DIHEDRAL NUMBER OUT OF RANGE (")+to_string(dihedralNumber)+string(").").c_str());
+		throw my_error;
 	}
 	if((atom<1)||(atom>4)){		
-		MyError myError(string("ERROR: REQUEST FOR A DIHEDRAL WITH AN ATOM OUT OF RANGE (")+to_string(atom)+string(").").c_str());
-		throw myError;
+		My_Error my_error(string("ERROR: REQUEST FOR A DIHEDRAL WITH AN ATOM OUT OF RANGE (")+to_string(atom)+string(").").c_str());
+		throw my_error;
 	}
 	return dihedrals_top[dihedralNumber-1][atom-1];
 }
 
 //returns the atomnumber of an atom in a given angle, e.g. getAngleAtom(575,1) gives the number of the first atom in angle 575 (all indices start at 1)
-int EntropyMatrix::getAngleAtom(unsigned int angleNumber, unsigned int atom){
+int Entropy_Matrix::getAngleAtom(unsigned int angleNumber, unsigned int atom){
 	if((angleNumber<1)||(angleNumber>dihedrals_top.size()+1)){		
-		MyError myError(string("ERROR: REQUEST FOR AN ANGLE NUMBER OUT OF RANGE (")+to_string(angleNumber)+string(").").c_str());
-		throw myError;
+		My_Error my_error(string("ERROR: REQUEST FOR AN ANGLE NUMBER OUT OF RANGE (")+to_string(angleNumber)+string(").").c_str());
+		throw my_error;
 	}
 	if((atom<1)||(atom>3)){		
-		MyError myError(string("ERROR: REQUEST FOR AN ANGLE WITH AN ATOM OUT OF RANGE (")+to_string(atom)+string(").").c_str());
-		throw myError;
+		My_Error my_error(string("ERROR: REQUEST FOR AN ANGLE WITH AN ATOM OUT OF RANGE (")+to_string(atom)+string(").").c_str());
+		throw my_error;
 	}
 	if(angleNumber>1){
 		return dihedrals_top[angleNumber-2][atom];
@@ -725,14 +918,14 @@ int EntropyMatrix::getAngleAtom(unsigned int angleNumber, unsigned int atom){
 }
 
  //returns the atomnumber of an atom in a given dihedral, e.g. getDihedralAtom(727,3) gives the number of the third atom in dihedral 727 (all indices start at 1)
-int EntropyMatrix::getBondAtom(unsigned int bondNumber, unsigned int atom){
+int Entropy_Matrix::getBondAtom(unsigned int bondNumber, unsigned int atom){
 	if((bondNumber<1)||(bondNumber>dihedrals_top.size()+2)){		
-		MyError myError(string("ERROR: REQUEST FOR A BOND NUMBER OUT OF RANGE (")+to_string(bondNumber)+string(").").c_str());
-		throw myError;
+		My_Error my_error(string("ERROR: REQUEST FOR A BOND NUMBER OUT OF RANGE (")+to_string(bondNumber)+string(").").c_str());
+		throw my_error;
 	}
 	if((atom<1)||(atom>2)){		
-		MyError myError(string("ERROR: REQUEST FOR A BOND WITH AN ATOM OUT OF RANGE (")+to_string(atom)+string(").").c_str());
-		throw myError;
+		My_Error my_error(string("ERROR: REQUEST FOR A BOND WITH AN ATOM OUT OF RANGE (")+to_string(atom)+string(").").c_str());
+		throw my_error;
 	}
 	if(bondNumber>2){
 		return dihedrals_top[bondNumber-3][atom+1];
@@ -746,7 +939,7 @@ int EntropyMatrix::getBondAtom(unsigned int bondNumber, unsigned int atom){
 }
 
 
-void EntropyMatrix::setPseudoZero(){  //set mutual information terms involving pseudo degrees of freedom zero;
+void Entropy_Matrix::setPseudoZero(){  //set mutual information terms involving pseudo degrees of freedom zero;
   vector <unsigned int> pseudoBonds;
   vector <unsigned int> pseudoAngles;
   vector <unsigned int> pseudoDihedrals;
@@ -812,10 +1005,11 @@ void EntropyMatrix::setPseudoZero(){  //set mutual information terms involving p
         setMutual(TYPE_D,TYPE_D,pseudoDihedrals[i],j,0);
       }
     }
-    
+}
 
-  
-  
+streamoff Entropy_Matrix::get_bat_file_dofs_begin()
+{
+    return bat_file_dofs_begin;
 }
 
 #pragma pack(0)

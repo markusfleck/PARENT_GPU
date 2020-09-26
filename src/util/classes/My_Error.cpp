@@ -20,9 +20,9 @@
 #include <stdexcept>
 #include <string>
 
-class MyError : public std::runtime_error {
+class My_Error : public std::runtime_error {
   public:
-    MyError(const std::string& msg = "") : std::runtime_error(msg) {}
+    My_Error(const std::string& msg = "") : std::runtime_error(msg) {}
   };
   
   #endif

@@ -1,4 +1,4 @@
-//    A class for handling an EntropyMatrix from a .par file of the PARENT suite 
+//    A class for handling an Entropy_Matrix from a .par file of the PARENT suite 
 //    Copyright (C) 2016  Markus Fleck (member of the laboratory of Bojan Zagrovic, University of Vienna)
 //
 //    This program is free software: you can redistribute it and/or modify
@@ -37,26 +37,30 @@
 #include <vector>
 #include <string>
 #include <fstream>
+#include <sstream>
+#include "../util.h"
 
 
 
 
-class EntropyMatrix {
+class Entropy_Matrix {
     public:
-      EntropyMatrix(char const * infileInput);
-      EntropyMatrix(unsigned int nAtoms);
-      ~EntropyMatrix();
+      Entropy_Matrix(char const * infileInput);
+      Entropy_Matrix(unsigned int nAtoms);
+      Entropy_Matrix(char const * bat_file, double* storage, unsigned int n_bins);
+      ~Entropy_Matrix();
     
     double getEntropy(int type, unsigned int index); //get the 1D entropy of a BAT degree of freedom: e. g. getEntropy(TYPE_A, 27) gives the entropy of the 27th angle (indexing starts at 1)
     double get2DEntropy(int type1, int type2, unsigned int index1, unsigned int index2); //get the 2D entropy of 2 degrees of freedom: get2DEntropy(TYPE_B, TYPE_D, 12, 38) gives the 2D entropy of the 12th bond and the 38th dihedral (indexing starts at 1)
     double getMutual(int type1, int type2, unsigned int index1, unsigned int index2);//get the mutual information between 2 degrees of freedom: getMutual(TYPE_A, TYPE_B, 27, 9) gives the mutual information between the 27th angle and the 9th bond (indexing starts at 1)
 		
 		void setEntropy(int type, unsigned int index, double value); //set the 1D entropy of a BAT degree of freedom: e. g. setEntropy(TYPE_A, 27) sets the entropy of the 27th angle (indexing starts at 1)
-    void set2DEntropy(int type1, int type2, unsigned int index1, unsigned int index2, double value); //set the 2D entropy of 2 degrees of freedom: set2DEntropy(TYPE_B, TYPE_D, 12, 38) sets the 2D entropy of the 12th bond and the 38th dihedral (indexing starts at 1)
+		void setEntropy(unsigned int dof_id, double value); // the same, but dof_int starts at zero and is global, i. e. ranges from 0 to n_atoms - 1     
+	void set2DEntropy(int type1, int type2, unsigned int index1, unsigned int index2, double value); //set the 2D entropy of 2 degrees of freedom: set2DEntropy(TYPE_B, TYPE_D, 12, 38) sets the 2D entropy of the 12th bond and the 38th dihedral (indexing starts at 1)
     void setMutual(int type1, int type2, unsigned int index1, unsigned int index2, double value); //set the mutual information between 2 degrees of freedom: setMutual(TYPE_A, TYPE_B, 27, 9) sets the mutual information between the 27th angle and the 9th bond (indexing starts at 1)
     
     
-    void write(char const * outfileName); //writes the EntropyMatrix using a .par file format
+    void write(char const * outfileName); //writes the Entropy_Matrix using a .par file format
     
     unsigned int getNBonds(); //returns the number of bonds in the system
     unsigned int getNAngles(); //returns the number of angles in the system
@@ -72,21 +76,24 @@ class EntropyMatrix {
 		int getDihedralAtom(unsigned int dihedralNumber, unsigned int atom); //returns the atomnumber of an atom in a given dihedral, e.g. getDihedralAtom(727,3) gives the number of the third atom in dihedral 727 (all indices start at 1)
     
     void setPseudoZero(); //set mutual information terms involving pseudo degrees of freedom zero;
-    
-		
-		private:
+    std::streamoff get_bat_file_dofs_begin(); // if a .bat file was read, get the location in the file where the header has ended and the body starts
+
+
+	
+	private:
       void write_PAR_header(); 
       void read_PAR_header(); 
       void write_PAR_body();
-      void read_PAR_body(); 
+      void read_PAR_body();
+	  void read_BAT_header(); 
     
+	  int bDens1D, aDens1D, dDens1D, bDens, aDens, dDens; 
+	  int double_prec, numFrames, version;
       unsigned int nBonds, nAngles, nDihedrals;
-      int double_prec, numFrames,version;
       double *bondsEntropy1D, *anglesEntropy1D, *dihedralsEntropy1D; 
       double *bbEntropy, *baEntropy, *bdEntropy, *aaEntropy, *adEntropy, *ddEntropy;
       std::vector< std::vector <int> > dihedrals_top; 
       std::vector <float>  masses;
-      int bDens1D, aDens1D, dDens1D, bDens, aDens, dDens; 
       std::vector <std::string> residues;
       std::vector <int> residueNumbers;
       std::vector <std::string> atomNames;
@@ -94,6 +101,7 @@ class EntropyMatrix {
       std::string infilestring;
       std::ifstream infile;
       std::ofstream outfile;
+	  std::streamoff bat_file_dofs_begin;
 };
 
 

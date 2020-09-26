@@ -1,3 +1,10 @@
+#define PRECISION double
+#define MODFITNBINS 100
+#define WARPMULTIPLES 1
+#define MEMORY_USAGE 0.8 //GPU
+#define RAM_USAGE 0.8 //CPU
+#define DEBUG false
+
 #include <iostream>
 #include <fstream>
 #include <cmath>
@@ -7,12 +14,10 @@
 #include "../util/io/io.h"
 #include "../util/types.h"
 
-#define PRECISION double
-#define MODFITNBINS 100
-#define WARPMULTIPLES 1
-#define MEMORY_USAGE 0.8 //GPU
-#define RAM_USAGE 0.8 //CPU
-#define DEBUG false
+#include "../util/classes/Entropy_Matrix.h"
+#include "../util/classes/Bat.h"
+//TODO: proper inclusion
+#include "PARENT_gpu_kernels.cu"
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t return_code, const char *file, int line)
@@ -28,56 +33,6 @@ using namespace std;
 
 
 
-struct Bins {
-	unsigned int bonds1D;
-	unsigned int angles1D;
-	unsigned int dihedrals1D;
-	unsigned int bonds2D;
-	unsigned int angles2D;
-	unsigned int dihedrals2D;
-};
-
-
-unsigned char get_dof_type_from_id(unsigned int dof_id, unsigned int n_dihedrals)
-{
-	if(dof_id < n_dihedrals + 2) return TYPE_B;
-	if(dof_id < 2 * n_dihedrals + 3) return TYPE_A;
-	return TYPE_D;
-}
-
-
-
-unsigned int get_min_id_for_type(unsigned char type, unsigned int n_dihedrals)
-{
-	switch(type) {
-  		case TYPE_B:
-    			return 0;
-  		case TYPE_A:
-    			return n_dihedrals + 2;
-		case TYPE_D:
-    			return 2 * n_dihedrals + 3;
-	}
-	return 42;
-}
-
-
-
-unsigned int get_max_id_for_type(unsigned char type, unsigned int n_dihedrals)
-{
-	switch(type) {
-  		case TYPE_B:
-    			return n_dihedrals + 1;
-  		case TYPE_A:
-    			return 2 * n_dihedrals + 2;
-		case TYPE_D:
-    			return 3 * n_dihedrals + 2;
-	}
-	return 42;
-}
-
-
-
-
 class GPU_RAM_Block
 {
 	public:
@@ -87,6 +42,7 @@ class GPU_RAM_Block
 		unsigned int n_dofs;
 		unsigned long long int n_bytes;
 		PRECISION* cpu_ram_start;
+		PRECISION* gpu_ram_start;
 
 		GPU_RAM_Block(PRECISION* cpu_ram_start, unsigned int first_dof, unsigned int last_dof, unsigned int n_frames, unsigned int n_dihedrals)
 		{
@@ -101,7 +57,8 @@ class GPU_RAM_Block
 
 		void deploy(PRECISION* gpu_ram_start)
 		{
-			gpuErrchk(cudaMemcpy(cpu_ram_start, gpu_ram_start, n_bytes, cudaMemcpyHostToDevice));
+			gpuErrchk(cudaMemcpy(gpu_ram_start, cpu_ram_start, n_bytes, cudaMemcpyHostToDevice));
+			this->gpu_ram_start = gpu_ram_start;
 		}	
 };
 
@@ -120,8 +77,6 @@ class CPU_RAM_Block
 		unsigned int n_dihedrals;
 		unsigned int gpu_dofs_per_block;
 		unsigned int n_frames;
-		ifstream* bat_file;
-		streamoff file_dofs_begin; 
 		unsigned char precision_traj;
 		vector<GPU_RAM_Block> blocks;
 		PRECISION* block_start;
@@ -134,9 +89,10 @@ class CPU_RAM_Block
 		PRECISION* bonds;
 		PRECISION* angles;
 		PRECISION* dihedrals;
+        Bat* bat;
 	
-	CPU_RAM_Block(unsigned int dof_id_start, unsigned int dof_id_end, unsigned int gpu_dofs_per_block, unsigned int n_dihedrals, unsigned int n_frames, ifstream* bat_file, 
-			streamoff file_dofs_begin, unsigned char precision_traj, PRECISION* minima, PRECISION* maxima, unsigned int n_bins, PRECISION* result_entropy1D)
+	CPU_RAM_Block(unsigned int dof_id_start, unsigned int dof_id_end, unsigned int gpu_dofs_per_block, Bat* bat,
+        PRECISION* minima, PRECISION* maxima, unsigned int n_bins, PRECISION* result_entropy1D)
 	{
 		cout<<"\nRAMBLOCK "<<dof_id_start<<" "<<dof_id_end<<endl;
 		cout<<"DOFS BEFORE "<<type_n_dofs[0]<<" "<<type_n_dofs[1]<<" "<<type_n_dofs[2]<<endl;
@@ -145,18 +101,20 @@ class CPU_RAM_Block
 		this->dof_id_start = dof_id_start;
 		this->dof_id_end = dof_id_end;
 		this->n_dofs = dof_id_end - dof_id_start + 1;
-		this->n_dihedrals = n_dihedrals;
+		this->n_dihedrals = bat->get_n_dihedrals();
 		this->gpu_dofs_per_block = gpu_dofs_per_block;
-		this->n_frames = n_frames;
-		this->bat_file = bat_file; 
-		this->file_dofs_begin = file_dofs_begin;
-		this->precision_traj = precision_traj;
+		this->n_frames = bat->get_n_frames();
+		this->precision_traj = bat->get_precision();
 		this->minima = minima;
 		this->maxima = maxima;  
 		this->n_bins = n_bins;		
 		this->result_entropy1D = result_entropy1D;
+        this->bat = bat;
 	
-		
+        
+    
+    
+    
 		for(unsigned short type = get_dof_type_from_id(dof_id_start, n_dihedrals); type <= get_dof_type_from_id(dof_id_end, n_dihedrals); type++){
 			cout<<"TYPE "<<type<<endl;
 			if(dof_id_start < get_min_id_for_type(type, n_dihedrals)) 
@@ -226,12 +184,14 @@ class CPU_RAM_Block
 
 	unsigned char load_dofs(PRECISION* dof_bank)
 	{
-		unsigned char fail=0;
-		bat_file->seekg(file_dofs_begin);
+		unsigned char fail = 0;
+        ifstream* file = bat->get_file(); 
+    
+		file->seekg( bat->get_dofs_begin() );
 		for(unsigned int frame=0; frame<n_frames; frame++)
 		{
-		        //to read a frame from the .bat trajectory
-		        double ddummy[6];
+            //to read a frame from the .bat trajectory
+            double ddummy[6];
 			float fdummy[11];
 			unsigned int a_start = get_min_id_for_type(TYPE_A, n_dihedrals); 
 			unsigned int d_start = get_min_id_for_type(TYPE_D, n_dihedrals); 
@@ -249,8 +209,8 @@ class CPU_RAM_Block
 		        }
 		        
 		
-		        bat_file->read((char*)fdummy, 11*sizeof(float));//read time, precision and box vectors to dummies
-		        fail=fail | (bat_file->rdstate() & std::ifstream::failbit);	
+		        file->read((char*)fdummy, 11*sizeof(float));//read time, precision and box vectors to dummies
+		        fail=fail | (file->rdstate() & std::ifstream::failbit);	
 			unsigned char inc;		
 		        if(precision_traj==1) 
 			{
@@ -260,38 +220,38 @@ class CPU_RAM_Block
 			{
 				inc = sizeof(float);
 			}	
-		        bat_file->read((char*)ddummy, 6 * inc);//external coordinates to dummies
-		        fail=fail | (bat_file->rdstate() & std::ifstream::failbit);
+		        file->read((char*)ddummy, 6 * inc);//external coordinates to dummies
+		        fail=fail | (file->rdstate() & std::ifstream::failbit);
 		            
-		        bat_file->read((char*)ddummy, inc);//read the lengths of the two bonds connecting the root atoms (internal coordinates)
-		        fail=fail | (bat_file->rdstate() & std::ifstream::failbit);
+		        file->read((char*)ddummy, inc);//read the lengths of the two bonds connecting the root atoms (internal coordinates)
+		        fail=fail | (file->rdstate() & std::ifstream::failbit);
 		        if( (b_counter >= type_id_start[TYPE_B]) && (b_counter <= type_id_end[TYPE_B]) ) bonds[b_counter_local++ * n_frames + frame] = ddummy[0];
 			b_counter++;
 
-			bat_file->read((char*)ddummy, inc);//read the lengths of the two bonds connecting the root atoms (internal coordinates)
-		        fail=fail | (bat_file->rdstate() & std::ifstream::failbit);
+			file->read((char*)ddummy, inc);//read the lengths of the two bonds connecting the root atoms (internal coordinates)
+		        fail=fail | (file->rdstate() & std::ifstream::failbit);
 		        if( (b_counter >= type_id_start[TYPE_B]) && (b_counter <= type_id_end[TYPE_B]) ) bonds[b_counter_local++ * n_frames + frame] = ddummy[0];
 			b_counter++;
 		            
-		        bat_file->read((char*)ddummy, inc);//and the angle between the two rootbonds (internal coordinates)
-		        fail=fail | (bat_file->rdstate() & std::ifstream::failbit);
+		        file->read((char*)ddummy, inc);//and the angle between the two rootbonds (internal coordinates)
+		        fail=fail | (file->rdstate() & std::ifstream::failbit);
 			if( (a_counter >= type_id_start[TYPE_A]) && (a_counter <= type_id_end[TYPE_A]) ) angles[a_counter_local++ * n_frames + frame] = ddummy[0];
 			a_counter++;  
 		        
 			for(int i = 0; i < n_dihedrals; i++) 
 		        { //then for all dihedrals in the system
-				bat_file->read((char*)ddummy, inc);//read the bondlength between the last two atoms in the dihedral
-		                fail=fail | (bat_file->rdstate() & std::ifstream::failbit);		              
+				file->read((char*)ddummy, inc);//read the bondlength between the last two atoms in the dihedral
+		                fail=fail | (file->rdstate() & std::ifstream::failbit);		              
 		        	if( (b_counter >= type_id_start[TYPE_B]) && (b_counter <= type_id_end[TYPE_B]) ) bonds[b_counter_local++ * n_frames + frame] = ddummy[0];
 				b_counter++;
 
-		                bat_file->read((char*)ddummy, inc);//read the angle between the last threee atoms of the dihedral#
-		                fail=fail | (bat_file->rdstate() & std::ifstream::failbit);
+		                file->read((char*)ddummy, inc);//read the angle between the last threee atoms of the dihedral#
+		                fail=fail | (file->rdstate() & std::ifstream::failbit);
 		        	if( (a_counter >= type_id_start[TYPE_A]) && (a_counter <= type_id_end[TYPE_A]) ) angles[a_counter_local++ * n_frames + frame] = ddummy[0];
 				a_counter++;
 
-		                bat_file->read((char*)ddummy, inc);//and the value of the dihedral itself
-		                fail=fail | (bat_file->rdstate() & std::ifstream::failbit);
+		                file->read((char*)ddummy, inc);//and the value of the dihedral itself
+		                fail=fail | (file->rdstate() & std::ifstream::failbit);
 		        	if( (d_counter >= type_id_start[TYPE_D]) && (d_counter <= type_id_end[TYPE_D]) ) dihedrals[d_counter_local++ * n_frames + frame] = ddummy[0];
 				d_counter++;
 			}
@@ -496,8 +456,8 @@ class GPU_RAM_Layout
 			dof_block_1 = (PRECISION*) gpu_ram_start;
 			dof_block_2 = dof_block_1 + dofs_per_block * n_frames;
 			result_fwd_1 = dof_block_2 + dofs_per_block * n_frames;
-			result_fwd_2 = result_fwd_1 + dofs_per_block * (dofs_per_block - 1);
-			result_all2all =  result_fwd_2 + dofs_per_block * (dofs_per_block - 1);
+			result_fwd_2 = result_fwd_1 + dofs_per_block * (dofs_per_block - 1) / 2;
+			result_all2all =  result_fwd_2 + dofs_per_block * (dofs_per_block - 1) / 2;
 			occupied_bins = (unsigned int*) (result_all2all + dofs_per_block * dofs_per_block);
 			histograms = occupied_bins + (2 * dofs_per_block - 1) * dofs_per_block;
 		}
@@ -509,6 +469,7 @@ class CPU_RAM_Layout
 		unsigned int dofs_per_block;
 		PRECISION* dof_block_1;
 		PRECISION* dof_block_2;
+		PRECISION* result_entropy;
 		PRECISION* result_entropy1D;
 		PRECISION* result_entropy1D_b;
 		PRECISION* result_entropy1D_a;
@@ -529,7 +490,7 @@ class CPU_RAM_Layout
 
 		CPU_RAM_Layout(unsigned int n_frames, unsigned long long int cpu_n_bytes, char* cpu_ram_start, unsigned int gpu_dofs_per_block, unsigned int n_dihedrals)
 		{
-        		unsigned int n_dofs_total = 3 * (n_dihedrals + 1);
+            unsigned int n_dofs_total = 3 * (n_dihedrals + 1);
 			unsigned int n_bonds = n_dihedrals + 2;
 			unsigned int n_angles = n_dihedrals + 1;
 			// calculate the maximum number of dofs (for one of the two dof_blocks) so that everything still fits into CPU RAM
@@ -551,7 +512,9 @@ class CPU_RAM_Layout
 			dof_block_1 = (PRECISION*) cpu_ram_start;
 			dof_block_2 = dof_block_1 + dofs_per_block * n_frames;
 			
-			result_entropy1D = dof_block_2 + dofs_per_block * n_frames;
+			
+			result_entropy = dof_block_2 + dofs_per_block * n_frames;
+			result_entropy1D = result_entropy;
 			result_entropy1D_b = result_entropy1D;
 			result_entropy1D_a = result_entropy1D_b + n_bonds;
 			result_entropy1D_d = result_entropy1D_a + n_angles;
@@ -580,36 +543,34 @@ class CPU_RAM_Layout
 class RAM{
 	public:
 		char *cpu_ram_start;
-                char *cpu_ram_end;
-                unsigned long long int cpu_n_bytes;
+        char *cpu_ram_end;
+        unsigned long long int cpu_n_bytes;
 		char *gpu_ram_start;
-                char *gpu_ram_end;
-                unsigned long long int gpu_n_bytes;
+        char *gpu_ram_end;
+        unsigned long long int gpu_n_bytes;
 		GPU_RAM_Layout* gpu_ram_layout;
 		CPU_RAM_Layout* cpu_ram_layout;
 		unsigned int n_dihedrals;
 		unsigned int n_dofs_total;
 		vector<CPU_RAM_Block> blocks;
 
-		RAM(unsigned long long int cpu_n_bytes, unsigned long long int gpu_n_bytes, unsigned int n_dihedrals, unsigned int n_frames, 
-			unsigned int n_bins, ifstream* bat_file, streamoff file_dofs_begin, unsigned char precision_traj)
+		RAM(unsigned long long int cpu_n_bytes, unsigned long long int gpu_n_bytes, Bat* bat, unsigned int n_bins)
 		{
 			cpu_ram_start = new char [cpu_n_bytes];
 			cpu_ram_end = cpu_ram_start + cpu_n_bytes - 1;
-                        this->cpu_n_bytes = cpu_n_bytes; 
+            this->cpu_n_bytes = cpu_n_bytes; 
 			gpuErrchk( cudaMalloc((void**) &gpu_ram_start, gpu_n_bytes) );
-                        gpu_ram_end = gpu_ram_start + gpu_n_bytes - 1;
-                        this->gpu_n_bytes = gpu_n_bytes;
-			gpu_ram_layout = new GPU_RAM_Layout(n_frames, n_bins, gpu_n_bytes, gpu_ram_start);
-			this->n_dihedrals = n_dihedrals;
+            gpu_ram_end = gpu_ram_start + gpu_n_bytes - 1;
+            this->gpu_n_bytes = gpu_n_bytes;
+			gpu_ram_layout = new GPU_RAM_Layout(bat->get_n_frames(), n_bins, gpu_n_bytes, gpu_ram_start);
+			this->n_dihedrals = bat->get_n_dihedrals();
             this->n_dofs_total = 3 * (n_dihedrals + 1);
-			cpu_ram_layout = new CPU_RAM_Layout(n_frames, cpu_n_bytes, cpu_ram_start, gpu_ram_layout->dofs_per_block, n_dihedrals);
+			cpu_ram_layout = new CPU_RAM_Layout(bat->get_n_frames(), cpu_n_bytes, cpu_ram_start, gpu_ram_layout->dofs_per_block, n_dihedrals);
 			for(unsigned int i = 0; i < n_dofs_total; i+=cpu_ram_layout->dofs_per_block)
 			{
 				unsigned int end = i + cpu_ram_layout->dofs_per_block - 1;
 				if(end > n_dofs_total - 1) end = n_dofs_total - 1;
-				blocks.push_back(*new CPU_RAM_Block(i, end, gpu_ram_layout->dofs_per_block, n_dihedrals, n_frames, bat_file, file_dofs_begin, precision_traj, 
-									cpu_ram_layout->minima, cpu_ram_layout->maxima, n_bins, cpu_ram_layout->result_entropy1D));
+				blocks.push_back(*new CPU_RAM_Block(i, end, gpu_ram_layout->dofs_per_block, bat, cpu_ram_layout->minima, cpu_ram_layout->maxima, n_bins, cpu_ram_layout->result_entropy1D));
 			} 
 
 			
@@ -622,12 +583,30 @@ class RAM{
 class PARENT_GPU{
 	public:
 		RAM* ram;
+		int threads_per_block;
+		unsigned int n_bins;
+		unsigned int n_frames;
+		Entropy_Matrix* ent_mat;
+		unsigned int n_dihedrals;
+        Bat* bat;
 
-	PARENT_GPU(unsigned long long int cpu_n_bytes, unsigned long long int gpu_n_bytes, unsigned int n_dihedrals, unsigned int n_frames, 
-			unsigned int n_bins, ifstream* bat_file, streamoff file_dofs_begin, unsigned char precision_traj)
+	PARENT_GPU(unsigned long long int cpu_n_bytes, unsigned long long int gpu_n_bytes, char const * bat_str, unsigned int n_bins, int threads_per_block)
 	{
-		ram = new RAM(cpu_n_bytes, gpu_n_bytes, n_dihedrals, n_frames, n_bins, bat_file, file_dofs_begin, precision_traj);
-	
+        this->threads_per_block = threads_per_block;
+		this->n_bins = n_bins;
+        
+		bat = new Bat(bat_str);
+        
+        this->n_frames = bat->get_n_frames();
+		this->n_dihedrals = bat->get_n_dihedrals();
+    
+        ram = new RAM(cpu_n_bytes, gpu_n_bytes, bat, n_bins);
+        ent_mat = new Entropy_Matrix(bat_str, ram->cpu_ram_layout->result_entropy, n_bins);
+    
+        
+		
+    
+        
 	}
 
 	void calculate_entropy()
@@ -643,7 +622,12 @@ class PARENT_GPU{
 				cout<<"Deploy Block "<<j+1<<" to RAM bank 2."<<endl;
 				ram->blocks[j].deploy(ram->cpu_ram_layout->dof_block_2);
 				//cout<<ram->cpu_ram_layout->result_entropy1D[-1]<<" "<<ram->cpu_ram_layout->result_entropy1D[0]<<endl<<endl;
-	
+				
+				for(unsigned int k = 0; k < ram->blocks[i].blocks.size(); k++){
+					for(unsigned int l = 0; l < ram->blocks[j].blocks.size(); l++){
+						calculate_block_pair( &(ram->blocks[i].blocks[k]) , &(ram->blocks[j].blocks[l]) );
+					}
+				}
 			}
 		}
 	
@@ -663,28 +647,111 @@ class PARENT_GPU{
 //
 //
 //	}
+		
+	unsigned char get_pair_type(unsigned char type1, unsigned char type2){
+		if( (type1 == TYPE_B) || (type2 == TYPE_B))
+		{
+			return type1 + type2;	
+		}
+		else
+		{
+			return type1 + type2 + 1;
+		}
+	
+	}
 
+	void calculate_block_pair(GPU_RAM_Block* block1, GPU_RAM_Block* block2)
+	{
+		block1->deploy(ram->gpu_ram_layout->dof_block_1);
+		block2->deploy(ram->gpu_ram_layout->dof_block_2);
+		
+		
+		for (unsigned int i = 0; i < block1->n_dofs; i++)
+		{
+			for (unsigned int j = 0; j < block2->n_dofs; j++)
+			{ 
+				unsigned int dof1 = i + block1->first_dof;
+				unsigned int dof2 = j + block2->first_dof;
+				PRECISION min1 = ram->cpu_ram_layout->minima[dof1];
+				PRECISION min2 = ram->cpu_ram_layout->minima[dof2];
+			
+				PRECISION bin_size1 = ( ram->cpu_ram_layout->maxima[dof1] - min1 ) / n_bins;		
+				PRECISION bin_size2 = ( ram->cpu_ram_layout->maxima[dof2] - min2 ) / n_bins;
+				//~ unsigned int* histogram = ram->gpu_ram_layout->histograms + i * block2->n_dofs + j;
+				int blocks = n_frames / threads_per_block;
+				if (n_frames % threads_per_block > 0) blocks++; 	
+				//~ histo2D<<<blocks,threads_per_block>>>(block1->gpu_ram_start + i * n_frames, block2->gpu_ram_start + j * n_frames, n_frames, histogram, n_bins, bin_size1, bin_size2, min1, min2);
+	        	}
+		}
+		gpuErrchk( cudaPeekAtLastError() );
+	        gpuErrchk( cudaDeviceSynchronize() );
+
+		
+
+
+		for (unsigned int i = 0; i < block1->n_dofs; i++)
+		{
+			for (unsigned int j = 0; j < block2->n_dofs; j++)
+			{
+				unsigned int dof1 = i + block1->first_dof;
+				unsigned int dof2 = j + block2->first_dof;
+				PRECISION min1 = ram->cpu_ram_layout->minima[dof1];
+				PRECISION min2 = ram->cpu_ram_layout->minima[dof2];
+			
+				PRECISION bin_size1 = ( ram->cpu_ram_layout->maxima[dof1] - min1 ) / n_bins;		
+				PRECISION bin_size2 = ( ram->cpu_ram_layout->maxima[dof2] - min2 ) / n_bins;
+				//~ unsigned int* histogram = ram->gpu_ram_layout->histograms + i * block2->n_dofs + j;
+				//~ PRECISION* plnpsum = ram->gpu_ram_layout->result_all2all + i * block2->n_dofs + j;
+				//~ unsigned int* occupbins = ram->gpu_ram_layout->occupied_bins + i * block2->n_dofs + j;
+				int blocks = n_bins * n_bins / threads_per_block;
+				if (n_bins * n_bins % threads_per_block > 0) blocks++; 
+
+				switch( get_pair_type(block1->type, block2->type) )
+				{
+					case(TYPE_BB):
+						//cu_bbEnt(unsigned int *histo, const int numFrames, const int bins, PRECISION binSize1, PRECISION binSize2, PRECISION min1, PRECISION min2, PRECISION *plnpsum, unsigned int *occupbins)	
+					break;
+					case(TYPE_BA):
+						//~ cu_baEnt<<<blocks,threads_per_block>>>(histogram, n_frames, n_bins, n_bins, bin_size1, bin_size2, min1, min2, plnpsum, occupbins);
+					break;
+					case(TYPE_BD):
+						//cu_bdEnt(unsigned int *histo, const int numFrames, const int bins1, const int bins2, PRECISION binSize1, PRECISION binSize2, PRECISION min1, PRECISION *plnpsum, unsigned int *occupbins)
+					break;
+					case(TYPE_AA):
+						//cu_aaEnt(unsigned int *histo, const int numFrames, const int bins, PRECISION binSize1, PRECISION binSize2, PRECISION min1, PRECISION min2, PRECISION *plnpsum, unsigned int *occupbins)	
+					break;
+					case(TYPE_AD):
+						//cu_adEnt(unsigned int *histo, const int numFrames, const int bins1, const int bins2, PRECISION binSize1, PRECISION binSize2, PRECISION min1, PRECISION *plnpsum, unsigned int *occupbins)
+					break;
+					case(TYPE_DD):
+						//cu_ddEnt(unsigned int *histo, const int numFrames, const int bins, PRECISION binSize1, PRECISION binSize2, PRECISION *plnpsum, unsigned int *occupbins)
+					break;
+				}
+			}
+		}
+		gpuErrchk( cudaPeekAtLastError() );
+        gpuErrchk( cudaDeviceSynchronize() );
+		gpuErrchk( cudaMemcpy(ram->cpu_ram_layout->tmp_result_entropy, ram->gpu_ram_layout->result_all2all, block1->n_dofs * block2->n_dofs * sizeof(PRECISION), cudaMemcpyDeviceToHost) );
+		gpuErrchk( cudaMemcpy(ram->cpu_ram_layout->tmp_result_entropy, ram->gpu_ram_layout->occupied_bins, block1->n_dofs * block2->n_dofs * sizeof(PRECISION), cudaMemcpyDeviceToHost) );
+		
+		for (unsigned int i = 0; i < block1->n_dofs; i++)
+		{
+			for (unsigned int j = 0; j < block2->n_dofs; j++)
+			{	
+				
+                //~ if (get_pair_type(block1->type, block2->type) == TYPE_BA){
+                    //~ PRECISION sav = ent_mat->get2DEntropy(block1->type, block2->type, i + 1, j + 1);
+                    ent_mat->set2DEntropy(block1->type, block2->type, i + 1, j + 1, ram->cpu_ram_layout->tmp_result_entropy[i * block2->n_dofs + j]);
+                    //~ cout << i << " " << j << " " <<ram->cpu_ram_layout->tmp_result_entropy[i * block2->n_dofs + j] << " " << sav << " " << ent_mat->get2DEntropy(block1->type, block2->type, i + 1, j + 1) << endl;
+                //~ }
+			}
+		}
+	}
 
 
 
 };
 
-
-#include <algorithm>
-char* getCmdOption(char ** begin, char ** end, const string & option)
-{
-    char ** itr = find(begin, end, option);
-    if (itr != end && ++itr != end)
-    {
-        return *itr;
-    }
-    return 0;
-}
-
-bool cmdOptionExists(char** begin, char** end, const string& option)
-{
-    return find(begin, end, option) != end;
-}
 
 
 int main(int argc, char *argv[]){
@@ -710,7 +777,7 @@ int main(int argc, char *argv[]){
 	cout<<"Warp size: "<<prop.warpSize<<endl;
 	cout<<endl<<endl;    
 	
-	//int threads_per_block = prop.warpSize*WARPMULTIPLES; 
+	int threads_per_block = prop.warpSize*WARPMULTIPLES; 
 	
 	int precision_traj, n_frames;
 	unsigned int n_bins;
@@ -770,25 +837,25 @@ int main(int argc, char *argv[]){
 	}
 	
 		
-	ifstream bat_file;
-	ofstream par_file;
+	ifstream bat;
+	//~ ofstream par_file;
 	cout<<"Reading file "<<getCmdOption(argv, argv+argc, "-f")<<" .\n";
 	//open the input/output files
-	bat_file.open(getCmdOption(argv, argv+argc, "-f"), ios::binary | ios::in );
-	par_file.open(getCmdOption(argv, argv+argc, "-o"),ios::binary | ios::out);
-	if(!(bat_file.is_open())) 
+	bat.open(getCmdOption(argv, argv+argc, "-f"), ios::binary | ios::in );
+	//~ par_file.open(getCmdOption(argv, argv+argc, "-o"),ios::binary | ios::out);
+	if(!(bat.is_open())) 
 	{
 	    cerr<<"ERROR: Could not open file "<<getCmdOption(argv, argv+argc, "-f")<<" ! Aborting."<<endl;
 	    exit(EXIT_FAILURE);
 	}
-	if(!(par_file.is_open())) 
-	{
-	    cerr<<"ERROR: Could not open file "<<getCmdOption(argv, argv+argc, "-f")<<" ! Aborting."<<endl;
-	    exit(EXIT_FAILURE);
-	}
+	//~ if(!(par_file.is_open())) 
+	//~ {
+	    //~ cerr<<"ERROR: Could not open file "<<getCmdOption(argv, argv+argc, "-f")<<" ! Aborting."<<endl;
+	    //~ exit(EXIT_FAILURE);
+	//~ }
 	
 	//and read the header of the trajectory
-	if(read_BAT_header(&bat_file, &precision_traj, &n_frames, &dihedrals_top, &masses, &residues, &residueNumbers, &atomNames, &belongsToMolecule)!=0) 
+	if(read_BAT_header(&bat, &precision_traj, &n_frames, &dihedrals_top, &masses, &residues, &residueNumbers, &atomNames, &belongsToMolecule)!=0) 
 	{
 	    cerr<<"AN ERROR HAS OCCURED WHILE READING THE HEADER OF THE FILE " <<getCmdOption(argv, argv+argc, "-b")<<" . QUITTING PROGRAM.\n";
 	    exit(EXIT_FAILURE);
@@ -796,15 +863,15 @@ int main(int argc, char *argv[]){
 	unsigned int n_dihedrals=dihedrals_top.size();
 	cout<<getCmdOption(argv, argv+argc, "-b")<<" specs:"<<endl;
 	cout<<"Precision: "<<(precision_traj == 1 ? "double" : "single")<<" #Atoms: "<<n_dihedrals + 3<<" #Frames: "<<n_frames<<endl;  // ---------------------------------------------------
-	streamoff file_dofs_begin = bat_file.tellg();
+	//~ streamoff file_dofs_begin = bat.tellg();
 	
-	//and write the header of the output (.par) file
-	if(write_PAR_header(&par_file,n_dihedrals,precision_traj,n_frames,&dihedrals_top, &masses, 
-				n_bins, n_bins, n_bins, n_bins, n_bins, n_bins, &residues, &residueNumbers, &atomNames, &belongsToMolecule) != 0) 
-	{
-	    cerr<<"AN ERROR HAS OCCURED WHILE WRITING THE HEADER OF THE FILE " <<getCmdOption(argv, argv+argc, "-o")<<" . QUITTING PROGRAM.\n";
-	    exit(EXIT_FAILURE);
-	}
+	//~ //and write the header of the output (.par) file
+	//~ if(write_PAR_header(&par_file,n_dihedrals,precision_traj,n_frames,&dihedrals_top, &masses, 
+				//~ n_bins, n_bins, n_bins, n_bins, n_bins, n_bins, &residues, &residueNumbers, &atomNames, &belongsToMolecule) != 0) 
+	//~ {
+	    //~ cerr<<"AN ERROR HAS OCCURED WHILE WRITING THE HEADER OF THE FILE " <<getCmdOption(argv, argv+argc, "-o")<<" . QUITTING PROGRAM.\n";
+	    //~ exit(EXIT_FAILURE);
+	//~ }
 
 
 
@@ -819,8 +886,11 @@ int main(int argc, char *argv[]){
 	unsigned long long int gpu_ram_available = static_cast<unsigned long long int>(1024)*1024*1024*1;
 
 
-	PARENT_GPU parent_gpu(cpu_ram_available, gpu_ram_available, n_dihedrals, n_frames, n_bins, &bat_file, file_dofs_begin, precision_traj);
+	PARENT_GPU parent_gpu(cpu_ram_available, gpu_ram_available, getCmdOption(argv, argv+argc, "-f"), n_bins, threads_per_block);
 	parent_gpu.calculate_entropy();
+    cout<<"Writing .par file."<<endl;
+    parent_gpu.ent_mat->write(getCmdOption(argv, argv+argc, "-o"));
+    cout<<".par file written."<<endl;
 	
 	//parent_gpu.ram->cpu_ram_layout->result_entropy1D[0] = 42;
 	//parent_gpu.ram->cpu_ram_layout->result_entropy1D[-1] = 42;
@@ -857,24 +927,24 @@ int main(int argc, char *argv[]){
     
     //write out the results to the binary .par file and measure time
     
-    if(write_PAR_body(&par_file, n_dihedrals, parent_gpu.ram->cpu_ram_layout->result_entropy1D_b, parent_gpu.ram->cpu_ram_layout->result_entropy1D_a, parent_gpu.ram->cpu_ram_layout->result_entropy1D_d, 
-                        parent_gpu.ram->cpu_ram_layout->result_entropy2D_bb, parent_gpu.ram->cpu_ram_layout->result_entropy2D_ba, parent_gpu.ram->cpu_ram_layout->result_entropy2D_bd, 
-                        parent_gpu.ram->cpu_ram_layout->result_entropy2D_aa, parent_gpu.ram->cpu_ram_layout->result_entropy2D_ad, parent_gpu.ram->cpu_ram_layout->result_entropy2D_dd) !=0 ) {
-        cerr<<"AN ERROR HAS OCCURED WHILE WRITING THE FILE " <<getCmdOption(argv, argv+argc, "-o")<<" .\n";
-        exit(EXIT_FAILURE);
-    }
+    //~ if(write_PAR_body(&par_file, n_dihedrals, parent_gpu.ram->cpu_ram_layout->result_entropy1D_b, parent_gpu.ram->cpu_ram_layout->result_entropy1D_a, parent_gpu.ram->cpu_ram_layout->result_entropy1D_d, 
+                        //~ parent_gpu.ram->cpu_ram_layout->result_entropy2D_bb, parent_gpu.ram->cpu_ram_layout->result_entropy2D_ba, parent_gpu.ram->cpu_ram_layout->result_entropy2D_bd, 
+                        //~ parent_gpu.ram->cpu_ram_layout->result_entropy2D_aa, parent_gpu.ram->cpu_ram_layout->result_entropy2D_ad, parent_gpu.ram->cpu_ram_layout->result_entropy2D_dd) !=0 ) {
+        //~ cerr<<"AN ERROR HAS OCCURED WHILE WRITING THE FILE " <<getCmdOption(argv, argv+argc, "-o")<<" .\n";
+        //~ exit(EXIT_FAILURE);
+    //~ }
     
 
 
-    //timings are written out
-    par_file.close();
+    //~ //timings are written out
+    //~ par_file.close();
     
     
-	par_file.close();
+	//~ par_file.close();
 	gettimeofday (&tv_end, NULL);
 	cout<<endl<<endl;
 	cout<<"Total execution time: "<<tv_end.tv_sec+1e-6 * tv_end.tv_usec-tv_start.tv_sec-1e-6 * tv_start.tv_usec<<endl;
- 	cout<<"PROGRAM FINISHED SUCCESSFULLYy."<<endl<<endl<<endl;
+ 	cout<<"PROGRAM FINISHED SUCCESSFULLY."<<endl<<endl<<endl;
 	
 	cudaDeviceReset();
 	return 0;

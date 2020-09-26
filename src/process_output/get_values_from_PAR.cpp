@@ -43,7 +43,7 @@ using namespace std;
 
 #include "../util/io/io.h"
 #include "../util/util.h"
-#include "../util/classes/MyError.cpp"
+#include "../util/classes/My_Error.cpp"
 
 
 
@@ -89,7 +89,7 @@ int main(int argc, char* argv[])
 			
 
     try{
-      EntropyMatrix mat(inputFilename);
+      Entropy_Matrix mat(inputFilename);
 
     
       int nBonds=mat.getNBonds();
@@ -212,8 +212,8 @@ int main(int argc, char* argv[])
 
 
     }
-    catch(MyError myError){
-      cerr<<myError.what()<<endl;
+    catch(My_Error my_error){
+      cerr<<my_error.what()<<endl;
 			cerr<<"USAGE:\n"<<argv[0]<<" -p input.par [--short]"<<endl;
       return 1;
     }

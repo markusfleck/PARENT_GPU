@@ -43,7 +43,7 @@
 #include <string>
 
 
-#include "../classes/EntropyMatrix.h"
+#include "../classes/Entropy_Matrix.h"
 #include "../types.h"
 
 int write_BAT_header(std::ofstream *outfile,int double_prec,int numframes,std::vector< std::vector <int> > *dihedrals_top, std::vector <float>  *masses, std::vector <std::string> *residues,std::vector <int> *residueNumbers,std::vector <std::string> *atomNames,std::vector <std::string> *belongsToMolecule);

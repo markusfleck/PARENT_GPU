@@ -32,7 +32,9 @@
 
 char* getCmdOption(char ** begin, char ** end, const std::string& option);
 bool cmdOptionExists(char** begin, char** end, const std::string& option);
-
+unsigned char get_dof_type_from_id(unsigned int dof_id, unsigned int n_dihedrals);
+unsigned int get_min_id_for_type(unsigned char type, unsigned int n_dihedrals);
+unsigned int get_max_id_for_type(unsigned char type, unsigned int n_dihedrals);
 
 
 
