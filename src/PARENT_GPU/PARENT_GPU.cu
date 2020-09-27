@@ -95,10 +95,7 @@ class CPU_RAM_Block
 	CPU_RAM_Block(unsigned int dof_id_start, unsigned int dof_id_end, unsigned int gpu_dofs_per_block, Bat* bat,
         PRECISION* minima, PRECISION* maxima, unsigned int n_bins, PRECISION* result_entropy1D)
 	{
-		cout<<"\nRAMBLOCK "<<dof_id_start<<" "<<dof_id_end<<endl;
-		cout<<"DOFS BEFORE "<<type_n_dofs[0]<<" "<<type_n_dofs[1]<<" "<<type_n_dofs[2]<<endl;
 
-		
 		this->dof_id_start = dof_id_start;
 		this->dof_id_end = dof_id_end;
 		this->n_dofs = dof_id_end - dof_id_start + 1;
@@ -117,7 +114,6 @@ class CPU_RAM_Block
     
     
 		for(unsigned short type = get_dof_type_from_id(dof_id_start, n_dihedrals); type <= get_dof_type_from_id(dof_id_end, n_dihedrals); type++){
-			cout<<"TYPE "<<type<<endl;
 			if(dof_id_start < get_min_id_for_type(type, n_dihedrals)) 
 			{
 				type_id_start[type] = get_min_id_for_type(type, n_dihedrals); 
@@ -141,7 +137,6 @@ class CPU_RAM_Block
 			if(type_n_dofs[type] % gpu_dofs_per_block > 0) gpu_ram_blocks_per_type[type] += 1;
 
 		}
-		cout<<"DOFS AFTER "<<type_n_dofs[0]<<" "<<type_n_dofs[1]<<" "<<type_n_dofs[2]<<endl<<endl;
 	}
 
 
@@ -154,8 +149,6 @@ class CPU_RAM_Block
 		bonds = type_addr[TYPE_B];
 		angles = type_addr[TYPE_A];
 		dihedrals = type_addr[TYPE_D];
-
-		//cout<<bonds<<" "<<angles<<" "<<dihedrals<<endl;
 
 
 		load_dofs(block_start);
@@ -353,7 +346,6 @@ class CPU_RAM_Block
 			{ //for all dofs 
     				tmpMax = block_start[j * n_frames];
     				tmpMin = block_start[j * n_frames];
-				//cout<<tmpMax<<endl;
     				for(int i = 1; i < n_frames; i++) 
 				{ //and all frames
         				if(block_start[j * n_frames + i] > tmpMax) 
@@ -380,7 +372,6 @@ class CPU_RAM_Block
 				{
         				tmpMax+=0.05;
     				}
-    				//cout<<j<<" "<<tmpMin<<" "<<tmpMax<<endl;
 				minima[dof_id_start + j] = tmpMin;//and store the calculated values
     				maxima[dof_id_start + j] = tmpMax;
 			}
@@ -557,7 +548,6 @@ class RAM{
 			cpu_ram_end = cpu_ram_start + cpu_n_bytes - 1;
             this->cpu_n_bytes = cpu_n_bytes; 
 			gpuErrchk( cudaMalloc((void**) &gpu_ram_start, gpu_n_bytes) );
-            cout<<endl<<endl<<gpu_n_bytes<<endl<<endl;
             gpu_ram_end = gpu_ram_start + gpu_n_bytes - 1;
             this->gpu_n_bytes = gpu_n_bytes;
 			gpu_ram_layout = new GPU_RAM_Layout(bat->get_n_frames(), n_bins, gpu_n_bytes, gpu_ram_start);
@@ -611,16 +601,16 @@ class PARENT_GPU{
 	{	
 	
 		for (unsigned int i = 0; i < ram->blocks.size() - 1; i++)
-		{	cout<<"Deploying Block "<<i+1<<" to RAM bank 1."<<endl; //TODO: think of more efficient deploying
+		{	cout<<endl<<"Deploying Block "<<i+1<<" (dofs "<<ram->blocks[i].dof_id_start<<" to "<<ram->blocks[i].dof_id_end<<") to RAM bank 1."<<endl; //TODO: think of more efficient deploying
 			ram->blocks[i].deploy(ram->cpu_ram_layout->dof_block_1);
             calculate_block_cpu( &(ram->blocks[i]) );
 			for (unsigned int j = i + 1; j < ram->blocks.size(); j++)
 			{
-				cout<<ram->blocks[i].dof_id_start<<" "<<ram->blocks[i].dof_id_end<<" "<<ram->blocks[j].dof_id_start<<" "<<ram->blocks[j].dof_id_end<<endl;
-				cout<<"Deploy Block "<<j+1<<" to RAM bank 2."<<endl;
+
+				cout<<endl<<"Deploying Block "<<j+1<<" (dofs "<<ram->blocks[j].dof_id_start<<" to "<<ram->blocks[j].dof_id_end<<") to RAM bank 2."<<endl; 
 				ram->blocks[j].deploy(ram->cpu_ram_layout->dof_block_2);
 				
-				calculate_block_pair_cpu(&(ram->blocks[i]), &(ram->blocks[j])); //TODO: think of more efficient deploying
+				calculate_block_pair_cpu(&(ram->blocks[i]), &(ram->blocks[j])); 
 			}
 		}
         
@@ -649,7 +639,7 @@ class PARENT_GPU{
                 calculate_block_pair_gpu( &(block->blocks[k]) , &(block->blocks[l]) );
             }
         }
-        calculate_block_gpu( &(block->blocks[block->blocks.size() - 1]) ); //TODO: think of more efficient deploying
+        calculate_block_gpu( &(block->blocks[block->blocks.size() - 1]) ); 
     }
 
 		
@@ -673,7 +663,6 @@ class PARENT_GPU{
     
         size_t bytes_to_zero = ram->gpu_ram_layout->dofs_per_block;
         bytes_to_zero *= ram->gpu_ram_layout->dofs_per_block * ( sizeof(PRECISION) + sizeof(unsigned int) * (n_bins * n_bins + 1) ); //TODO: zero only what is needed(block1->n_dofs instead of ram->gpu_ram_layout->dofs_per_block)
-        //~ cout<<bytes_to_zero<<" "<<ram->gpu_ram_layout->dofs_per_block<<" "<<n_frames<<endl;
         gpuErrchk( cudaMemset(ram->gpu_ram_layout->result, 0, bytes_to_zero) );
 		
 		
@@ -711,13 +700,6 @@ class PARENT_GPU{
 			
 				PRECISION bin_size1 = ( ram->cpu_ram_layout->maxima[dof1] - min1 ) / n_bins;		
 				PRECISION bin_size2 = ( ram->cpu_ram_layout->maxima[dof2] - min2 ) / n_bins;
-            
-                if(dof1==0 && dof2==327 && block1->type==0 && block2->type==0)
-                {
-                        cout<<"Hugo1234 " << min1 <<" "<<min2<<" "<<bin_size1<<" "<<bin_size2<<endl;
-                        
-                    
-                }
             
 				unsigned int* histogram = ram->gpu_ram_layout->histograms + (i * block2->n_dofs + j) * n_bins * n_bins;
 				PRECISION* plnpsum = ram->gpu_ram_layout->result + i * block2->n_dofs + j;
@@ -759,26 +741,8 @@ class PARENT_GPU{
 			{	
                 unsigned int dof1 = i + block1->first_dof - get_min_id_for_type(block1->type, n_dihedrals);
 				unsigned int dof2 = j + block2->first_dof - get_min_id_for_type(block2->type, n_dihedrals);
-            
-				
-                //~ if (get_pair_type(block1->type, block2->type) == TYPE_BA){
-                    //~ if(dof1==10 && dof2==10){
-                        //~ cout<<"Here"<<endl;
-                    //~ PRECISION sav = ent_mat->get2DEntropy(block1->type, block2->type, i + 1, j + 1);
-                    double entropy = -ram->cpu_ram_layout->tmp_result_entropy[i * block2->n_dofs + j] +(ram->cpu_ram_layout->tmp_result_occupied_bins[i * block2->n_dofs + j]-1.0)/(2.0*n_frames);
-                    if(dof1==0 && dof2==327 && block1->type==0 && block2->type==0){
-                        cout<<"Entropyy: " << entropy<<endl;
-                        cout<<"Entropy raw: "<< ram->cpu_ram_layout->tmp_result_entropy[i * block2->n_dofs + j]<<endl;
-                        cout<<"Occubins: " << ram->cpu_ram_layout->tmp_result_occupied_bins[i * block2->n_dofs + j]<<endl;
-                    
-                    }
-                    ent_mat->set2DEntropy(block1->type, block2->type, dof1 + 1, dof2 + 1, entropy);
-                    //~ ent_mat->set2DEntropy(block1->type, block2->type, dof1 + 1, dof2 + 1, 1234.4567);
-                    //~ ent_mat->write("output/UBM2_1_MIE_GPU.par");
-                    //~ exit(0);
-                    //~ cout<<ent_mat->get2DEntropy(block1->type, block2->type, i + 1, j + 1)<<endl;
-                    //~ cout << i << " " << j << " " <<ram->cpu_ram_layout->tmp_result_entropy[i * block2->n_dofs + j] << " " << sav << " " << ent_mat->get2DEntropy(block1->type, block2->type, i + 1, j + 1) << endl;
-                //~ }
+                double entropy = -ram->cpu_ram_layout->tmp_result_entropy[i * block2->n_dofs + j] +(ram->cpu_ram_layout->tmp_result_occupied_bins[i * block2->n_dofs + j]-1.0)/(2.0*n_frames);
+                ent_mat->set2DEntropy(block1->type, block2->type, dof1 + 1, dof2 + 1, entropy);
 			}
 		}
 	}
@@ -791,7 +755,6 @@ class PARENT_GPU{
         
         size_t bytes_to_zero = ram->gpu_ram_layout->dofs_per_block;
         bytes_to_zero *= ram->gpu_ram_layout->dofs_per_block * ( sizeof(PRECISION) + sizeof(unsigned int) * (n_bins * n_bins + 1) ); //TODO: zero only what is needed(block1->n_dofs instead of ram->gpu_ram_layout->dofs_per_block)
-        //~ cout<<bytes_to_zero<<" "<<ram->gpu_ram_layout->dofs_per_block<<" "<<n_frames<<endl;
         gpuErrchk( cudaMemset(ram->gpu_ram_layout->result, 0, bytes_to_zero) );
 		
 		for (unsigned int i = 0; i < block->n_dofs - 1; i++)
@@ -813,7 +776,6 @@ class PARENT_GPU{
 		}
 		gpuErrchk( cudaPeekAtLastError() );
         gpuErrchk( cudaDeviceSynchronize() );
-        //~ gpuErrchk( cudaMemset(ram->gpu_ram_layout->result, 0, 326*326*12) );
 		
 
 
@@ -828,13 +790,6 @@ class PARENT_GPU{
 			
 				PRECISION bin_size1 = ( ram->cpu_ram_layout->maxima[dof1] - min1 ) / n_bins;		
 				PRECISION bin_size2 = ( ram->cpu_ram_layout->maxima[dof2] - min2 ) / n_bins;
-            
-                //~ if(dof1==0 && dof2==1 && block->type==0)
-                //~ {
-                        //~ cout<<"Hugo123 " << min1 <<" "<<min2<<" "<<bin_size1<<" "<<bin_size2<<endl;
-                        
-                    
-                //~ }
                 
 				unsigned int* histogram = ram->gpu_ram_layout->histograms + (i * block->n_dofs + j) * n_bins * n_bins;
 				PRECISION* plnpsum = ram->gpu_ram_layout->result + i * block->n_dofs + j;
@@ -876,34 +831,8 @@ class PARENT_GPU{
 			{ 
                 unsigned int dof1 = i + block->first_dof - get_min_id_for_type(block->type, n_dihedrals);
 				unsigned int dof2 = j + block->first_dof - get_min_id_for_type(block->type, n_dihedrals);
-            
-                //TODO: calculate Herzel
-				
-                //~ if (get_pair_type(block->type, block->type) == TYPE_BA){
-                    //~ if(dof1==10 && dof2==10){
-                        //~ cout<<"Here"<<endl;
-                    //~ PRECISION sav = ent_mat->get2DEntropy(block->type, block->type, i + 1, j + 1);
-                    double entropy = -ram->cpu_ram_layout->tmp_result_entropy[i * block->n_dofs + j] +(ram->cpu_ram_layout->tmp_result_occupied_bins[i * block->n_dofs + j]-1.0)/(2.0*n_frames);
-                    //~ if(dof1==0 && dof2==1 && block->type==0){
-                        //~ cout<<"Entropy: " << entropy<<endl;
-                        //~ cout<<"Entropy raw: "<< ram->cpu_ram_layout->tmp_result_entropy[i * block->n_dofs + j]<<endl;
-                        //~ cout<<"Occubins: " << ram->cpu_ram_layout->tmp_result_occupied_bins[i * block->n_dofs + j]<<endl;
-                    
-                    //~ }
-                    //~ if((block->type == 0) && (dof1 == 0) && (dof2 == 1)) 
-                    //~ {
-                        //~ cout<<"HUGO "<<entropy<<endl;
-            
-                        ent_mat->set2DEntropy(block->type, block->type, dof1 + 1, dof2 + 1, entropy);
-                        //~ cout<<ent_mat->get2DEntropy(block->type, block->type, dof1 + 1, dof2 + 1)<<endl;
-                        //~ cout<<ent_mat->get2DEntropy(0, 0, 1, 2)<<endl;
-                    //~ }
-                    //~ ent_mat->set2DEntropy(block->type, block->type, dof1 + 1, dof2 + 1, 1234.4567);
-                    //~ ent_mat->write("output/UBM2_1_MIE_GPU.par");
-                    //~ exit(0);
-                    //~ cout<<ent_mat->get2DEntropy(block->type, block->type, i + 1, j + 1)<<endl;
-                    //~ cout << i << " " << j << " " <<ram->cpu_ram_layout->tmp_result_entropy[i * block->n_dofs + j] << " " << sav << " " << ent_mat->get2DEntropy(block->type, block->type, i + 1, j + 1) << endl;
-                //~ }
+                    double entropy = -ram->cpu_ram_layout->tmp_result_entropy[i * block->n_dofs + j] +(ram->cpu_ram_layout->tmp_result_occupied_bins[i * block->n_dofs + j]-1.0)/(2.0*n_frames); // includes Herzel entropy unbiasing
+                    ent_mat->set2DEntropy(block->type, block->type, dof1 + 1, dof2 + 1, entropy);
 			}
 		}
 	}
@@ -934,8 +863,7 @@ int main(int argc, char *argv[]){
 	cout<<"Shared memory per block: "<<prop.sharedMemPerBlock/1024<<" kiB"<<endl;
 	cout<<"Maximum threads per block dimension: "<<prop.maxThreadsDim[0]<<" "<<prop.maxThreadsDim[1]<<" "<<prop.maxThreadsDim[2]<<endl;
 	cout<<"Maximum blocks per grid dimension: "<<prop.maxGridSize[0]<<" "<<prop.maxGridSize[1]<<" "<<prop.maxGridSize[2]<<endl;
-	cout<<"Warp size: "<<prop.warpSize<<endl;
-	cout<<endl<<endl;    
+	cout<<"Warp size: "<<prop.warpSize<<endl<<endl;    
 	
 	int threads_per_block = prop.warpSize*WARPMULTIPLES; 
 	
@@ -1006,57 +934,7 @@ int main(int argc, char *argv[]){
     cout<<"Writing .par file."<<endl;
     parent_gpu.ent_mat->write(getCmdOption(argv, argv+argc, "-o"));
     cout<<".par file written."<<endl;
-    cout<<parent_gpu.ent_mat->get2DEntropy(0, 0, 1, 2)<<endl;
 	
-	//parent_gpu.ram->cpu_ram_layout->result_entropy1D[0] = 42;
-	//parent_gpu.ram->cpu_ram_layout->result_entropy1D[-1] = 42;
-
-	//cout<<parent_gpu.ram->gpu_ram_layout->dofs_per_block<<" "<<parent_gpu.ram->cpu_ram_layout->dofs_per_block<<endl;
-
-	//parent_gpu.ram->cpu_ram_layout->tmp_result_occupied_bins[0] = 1;
-
-
-	//for (unsigned int i = 0; i < parent_gpu.ram->blocks.size() - 1; i++)
-	//{	cout<<"Deploying Block "<<i+1<<" to RAM bank 1."<<endl;
-	//	parent_gpu.ram->blocks[i].deploy(parent_gpu.ram->cpu_ram_layout->dof_block_1);
-	//	//cout<<parent_gpu.ram->cpu_ram_layout->result_entropy1D[-1]<<" "<<parent_gpu.ram->cpu_ram_layout->result_entropy1D[0]<<endl<<endl;
-	//	for (unsigned int j = i + 1; j < parent_gpu.ram->blocks.size(); j++)
-	//	{
-	//		cout<<parent_gpu.ram->blocks[i].dof_id_start<<" "<<parent_gpu.ram->blocks[i].dof_id_end<<" "<<parent_gpu.ram->blocks[j].dof_id_start<<" "<<parent_gpu.ram->blocks[j].dof_id_end<<endl;
-	//		cout<<"Deploy Block "<<j+1<<" to RAM bank 2."<<endl;
-	//		parent_gpu.ram->blocks[j].deploy(parent_gpu.ram->cpu_ram_layout->dof_block_2);
-	//		//cout<<parent_gpu.ram->cpu_ram_layout->result_entropy1D[-1]<<" "<<parent_gpu.ram->cpu_ram_layout->result_entropy1D[0]<<endl<<endl;
-
-	//	}
-	//}
-
-	/*for(int i = 0; i<3*n_dihedrals + 3; i++)
-	{
-		parent_gpu.ram->cpu_ram_layout->minima[i] = 0;
-		parent_gpu.ram->cpu_ram_layout->maxima[i] = 0;
-	}
-	parent_gpu.ram->blocks[1].deploy(parent_gpu.ram->cpu_ram_layout->dof_block_1);*/
-
-
-	//for(int i = 0; i<3*n_dihedrals + 3; i++) cout<<i<<" "<<parent_gpu.ram->cpu_ram_layout->minima[i]<<" "<<parent_gpu.ram->cpu_ram_layout->maxima[i]<<endl;
-	//timings are written to stdout
-    
-    //write out the results to the binary .par file and measure time
-    
-    //~ if(write_PAR_body(&par_file, n_dihedrals, parent_gpu.ram->cpu_ram_layout->result_entropy1D_b, parent_gpu.ram->cpu_ram_layout->result_entropy1D_a, parent_gpu.ram->cpu_ram_layout->result_entropy1D_d, 
-                        //~ parent_gpu.ram->cpu_ram_layout->result_entropy2D_bb, parent_gpu.ram->cpu_ram_layout->result_entropy2D_ba, parent_gpu.ram->cpu_ram_layout->result_entropy2D_bd, 
-                        //~ parent_gpu.ram->cpu_ram_layout->result_entropy2D_aa, parent_gpu.ram->cpu_ram_layout->result_entropy2D_ad, parent_gpu.ram->cpu_ram_layout->result_entropy2D_dd) !=0 ) {
-        //~ cerr<<"AN ERROR HAS OCCURED WHILE WRITING THE FILE " <<getCmdOption(argv, argv+argc, "-o")<<" .\n";
-        //~ exit(EXIT_FAILURE);
-    //~ }
-    
-
-
-    //~ //timings are written out
-    //~ par_file.close();
-    
-    
-	//~ par_file.close();
 	gettimeofday (&tv_end, NULL);
 	cout<<endl<<endl;
 	cout<<"Total execution time: "<<tv_end.tv_sec+1e-6 * tv_end.tv_usec-tv_start.tv_sec-1e-6 * tv_start.tv_usec<<endl;
