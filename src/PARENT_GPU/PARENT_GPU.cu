@@ -952,41 +952,25 @@ int main(int argc, char *argv[]) {
     cerr << "USAGE: " << argv[0] << " -f input.bat -o entropy.par -b #bins\n";
     exit(EXIT_FAILURE);
   }
-  bool fail = false;
-  fail |= !cmdOptionExists(argv, argv + argc, "-f");
-  fail |= !cmdOptionExists(argv, argv + argc, "-o");
-  fail |= !cmdOptionExists(argv, argv + argc, "-b");
 
-  if (fail) {
+  Arg_Parser arg_parser(argc, argv);
+  if (!arg_parser.cmd_option_exists("-f") ||
+      !arg_parser.cmd_option_exists("-o") ||
+      !arg_parser.cmd_option_exists("-b")) {
     // check for correct command line options
     cerr << "USAGE: " << argv[0] << " -f input.bat -o entropy.par -b #bins\n";
     exit(EXIT_FAILURE);
   }
 
-  string tmp1(getCmdOption(argv, argv + argc,
-                           "-f")); // first argument is the .bat trajectory file
-  string tmp2(getCmdOption(argv, argv + argc,
-                           "-o")); // second argument is the .par output file
-  char *ptr, *type1, *type2;
-  char delimiter[] = ".";
-
-  ptr = strtok((char *)tmp1.c_str(), delimiter);
-  while (ptr != NULL) {
-    type1 = ptr;
-    ptr = strtok(NULL, delimiter);
-  }
-
-  ptr = strtok((char *)tmp2.c_str(), delimiter);
-  while (ptr != NULL) {
-    type2 = ptr;
-    ptr = strtok(NULL, delimiter);
-  }
-  if ((strcmp(type1, "bat")) || (strcmp(type2, "par"))) {
+  if (strcmp(arg_parser.get_extension(arg_parser.get_cmd_option("-f")),
+             "bat") ||
+      strcmp(arg_parser.get_extension(arg_parser.get_cmd_option("-o")),
+             "par")) {
     // check for the extensions of the input and output file
     cerr << "USAGE: " << argv[0] << " -f input.bat -o entropy.par -b #bins\n";
     exit(EXIT_FAILURE);
   }
-  if (sscanf(getCmdOption(argv, argv + argc, "-b"), "%ud", &n_bins) != 1) {
+  if (sscanf(arg_parser.get_cmd_option("-b"), "%ud", &n_bins) != 1) {
     // read the number of bins and check for correctness
     cerr << "ERROR: Could not read number of bins from command line! Aborting"
          << endl;
@@ -999,7 +983,7 @@ int main(int argc, char *argv[]) {
       static_cast<unsigned long long int>(1024) * 1024 * 1024 * 1;
 
   PARENT_GPU parent_gpu(cpu_ram_available, gpu_ram_available,
-                        getCmdOption(argv, argv + argc, "-f"), n_bins,
+                        arg_parser.get_cmd_option("-f"), n_bins,
                         threads_per_block);
   parent_gpu.calculate_entropy();
   cout << "Writing .par file." << endl;
