@@ -25,6 +25,8 @@
 #ifndef ENTROPY_MATRIX_H
 #define ENTROPY_MATRIX_H
 
+#define PRECISION double
+
 #include "../util.h"
 #include <fstream>
 #include <sstream>
@@ -35,21 +37,21 @@ class Entropy_Matrix {
 public:
   Entropy_Matrix(char const *infileInput);
   Entropy_Matrix(unsigned int nAtoms);
-  Entropy_Matrix(char const *bat_file, double *storage, unsigned int n_bins);
+  Entropy_Matrix(char const *bat_file, PRECISION *storage, unsigned int n_bins);
   ~Entropy_Matrix();
 
-  double getEntropy(
+  PRECISION getEntropy(
       int type,
       unsigned int index); // get the 1D entropy of a BAT degree of freedom: e.
                            // g. getEntropy(TYPE_A, 27) gives the entropy of the
                            // 27th angle (indexing starts at 1)
-  double get2DEntropy(
+  PRECISION get2DEntropy(
       int type1, int type2, unsigned int index1,
       unsigned int index2); // get the 2D entropy of 2 degrees of freedom:
                             // get2DEntropy(TYPE_B, TYPE_D, 12, 38) gives the 2D
                             // entropy of the 12th bond and the 38th dihedral
                             // (indexing starts at 1)
-  double getMutual(
+  PRECISION getMutual(
       int type1, int type2, unsigned int index1,
       unsigned int index2); // get the mutual information between 2 degrees of
                             // freedom: getMutual(TYPE_A, TYPE_B, 27, 9) gives
@@ -58,20 +60,20 @@ public:
 
   void
   setEntropy(int type, unsigned int index,
-             double value); // set the 1D entropy of a BAT degree of freedom: e.
+             PRECISION value); // set the 1D entropy of a BAT degree of freedom: e.
                             // g. setEntropy(TYPE_A, 27) sets the entropy of the
                             // 27th angle (indexing starts at 1)
   void setEntropy(unsigned int dof_id,
-                  double value); // the same, but dof_int starts at zero and is
+                  PRECISION value); // the same, but dof_int starts at zero and is
                                  // global, i. e. ranges from 0 to n_atoms - 1
   void
   set2DEntropy(int type1, int type2, unsigned int index1, unsigned int index2,
-               double value); // set the 2D entropy of 2 degrees of freedom:
+               PRECISION value); // set the 2D entropy of 2 degrees of freedom:
                               // set2DEntropy(TYPE_B, TYPE_D, 12, 38) sets the 2D
                               // entropy of the 12th bond and the 38th dihedral
                               // (indexing starts at 1)
   void setMutual(int type1, int type2, unsigned int index1, unsigned int index2,
-                 double value); // set the mutual information between 2 degrees
+                 PRECISION value); // set the mutual information between 2 degrees
                                 // of freedom: setMutual(TYPE_A, TYPE_B, 27, 9)
                                 // sets the mutual information between the 27th
                                 // angle and the 9th bond (indexing starts at 1)
@@ -130,8 +132,8 @@ private:
   int bDens1D, aDens1D, dDens1D, bDens, aDens, dDens;
   int double_prec, numFrames, version;
   unsigned int nBonds, nAngles, nDihedrals;
-  double *bondsEntropy1D, *anglesEntropy1D, *dihedralsEntropy1D;
-  double *bbEntropy, *baEntropy, *bdEntropy, *aaEntropy, *adEntropy, *ddEntropy;
+  PRECISION *bondsEntropy1D, *anglesEntropy1D, *dihedralsEntropy1D;
+  PRECISION *bbEntropy, *baEntropy, *bdEntropy, *aaEntropy, *adEntropy, *ddEntropy;
   std::vector<std::vector<int>> dihedrals_top;
   std::vector<float> masses;
   std::vector<std::string> residues;

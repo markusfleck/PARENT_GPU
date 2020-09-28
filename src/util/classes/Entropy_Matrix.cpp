@@ -78,15 +78,15 @@ Entropy_Matrix::Entropy_Matrix(unsigned int nAtoms) {
   nDihedrals = nAtoms - 3;
 
   bondsEntropy1D =
-      new double[nBonds]; // allocate storage for reading the .par file
-  anglesEntropy1D = new double[nAngles];
-  dihedralsEntropy1D = new double[nDihedrals];
-  bbEntropy = new double[nBonds * (nBonds - 1) / 2];
-  baEntropy = new double[nBonds * nAngles];
-  bdEntropy = new double[nBonds * nDihedrals];
-  aaEntropy = new double[nAngles * (nAngles - 1) / 2];
-  adEntropy = new double[nAngles * nDihedrals];
-  ddEntropy = new double[nDihedrals * (nDihedrals - 1) / 2];
+      new PRECISION[nBonds]; // allocate storage for reading the .par file
+  anglesEntropy1D = new PRECISION[nAngles];
+  dihedralsEntropy1D = new PRECISION[nDihedrals];
+  bbEntropy = new PRECISION[nBonds * (nBonds - 1) / 2];
+  baEntropy = new PRECISION[nBonds * nAngles];
+  bdEntropy = new PRECISION[nBonds * nDihedrals];
+  aaEntropy = new PRECISION[nAngles * (nAngles - 1) / 2];
+  adEntropy = new PRECISION[nAngles * nDihedrals];
+  ddEntropy = new PRECISION[nDihedrals * (nDihedrals - 1) / 2];
 
   if (!((bondsEntropy1D != NULL) && (anglesEntropy1D != NULL) &&
         (dihedralsEntropy1D != NULL) && (bbEntropy != NULL) &&
@@ -125,7 +125,7 @@ Entropy_Matrix::Entropy_Matrix(unsigned int nAtoms) {
   }
 }
 
-Entropy_Matrix::Entropy_Matrix(char const *bat_file, double *storage,
+Entropy_Matrix::Entropy_Matrix(char const *bat_file, PRECISION *storage,
                                unsigned int n_bins) {
 
   infile.exceptions(std::ifstream::badbit);
@@ -230,7 +230,7 @@ void Entropy_Matrix::write(char const *outfileInput) {
 }
 
 // to get 1D entropies
-double Entropy_Matrix::getEntropy(int type, unsigned int index) {
+PRECISION Entropy_Matrix::getEntropy(int type, unsigned int index) {
   if (index > 0) {
     if ((type == TYPE_B) && (index <= nBonds)) {
       return bondsEntropy1D[index - 1];
@@ -246,7 +246,7 @@ double Entropy_Matrix::getEntropy(int type, unsigned int index) {
 }
 
 // to get 2D entropy values
-double Entropy_Matrix::get2DEntropy(int type1, int type2, unsigned int index1,
+PRECISION Entropy_Matrix::get2DEntropy(int type1, int type2, unsigned int index1,
                                     unsigned int index2) {
   int smaller, bigger, index;
   index1--;
@@ -313,7 +313,7 @@ double Entropy_Matrix::get2DEntropy(int type1, int type2, unsigned int index1,
 }
 
 // to get mutual information values
-double Entropy_Matrix::getMutual(int type1, int type2, unsigned int index1,
+PRECISION Entropy_Matrix::getMutual(int type1, int type2, unsigned int index1,
                                  unsigned int index2) {
   int smaller, bigger, index;
   index1--;
@@ -398,7 +398,7 @@ double Entropy_Matrix::getMutual(int type1, int type2, unsigned int index1,
 }
 
 // to set 1D entropies
-void Entropy_Matrix::setEntropy(int type, unsigned int index, double value) {
+void Entropy_Matrix::setEntropy(int type, unsigned int index, PRECISION value) {
   if (index > 0) {
     if ((type == TYPE_B) && (index <= nBonds)) {
       bondsEntropy1D[index - 1] = value;
@@ -414,7 +414,7 @@ void Entropy_Matrix::setEntropy(int type, unsigned int index, double value) {
 
 // to set 1D entropies. This function accepts the global index, i. e from 0 to 3
 // * n_dihedrals + 2
-void Entropy_Matrix::setEntropy(unsigned int dof_id, double value) {
+void Entropy_Matrix::setEntropy(unsigned int dof_id, PRECISION value) {
   switch (get_dof_type_from_id(dof_id, nDihedrals)) {
   case TYPE_B:
     bondsEntropy1D[dof_id] = value;
@@ -430,7 +430,7 @@ void Entropy_Matrix::setEntropy(unsigned int dof_id, double value) {
 
 // to set 2D entropy values
 void Entropy_Matrix::set2DEntropy(int type1, int type2, unsigned int index1,
-                                  unsigned int index2, double value) {
+                                  unsigned int index2, PRECISION value) {
   int smaller, bigger, index;
   index1--;
   index2--;
@@ -497,7 +497,7 @@ void Entropy_Matrix::set2DEntropy(int type1, int type2, unsigned int index1,
 // to set mutual information values by changing 2D entropy values, without
 // modyfing 2D entropy values
 void Entropy_Matrix::setMutual(int type1, int type2, unsigned int index1,
-                               unsigned int index2, double value) {
+                               unsigned int index2, PRECISION value) {
   int smaller, bigger, index;
   index1--;
   index2--;
@@ -959,32 +959,32 @@ void Entropy_Matrix::write_PAR_body() {
   int nAngles = nDihedrals + 1;
 
   outfile.write((char *)bondsEntropy1D,
-                nBonds * sizeof(double)); // write the 1D entropy bonds array
+                nBonds * sizeof(PRECISION)); // write the 1D entropy bonds array
   outfile.write((char *)anglesEntropy1D,
-                nAngles * sizeof(double)); // write the 1D entropy angles array
+                nAngles * sizeof(PRECISION)); // write the 1D entropy angles array
   outfile.write((char *)dihedralsEntropy1D,
                 nDihedrals *
-                    sizeof(double)); // write the 1D entropy dihedrals array
+                    sizeof(PRECISION)); // write the 1D entropy dihedrals array
   outfile.write(
       (char *)bbEntropy,
       nBonds * (nBonds - 1) / 2 *
-          sizeof(double)); // write the 2D bonds-bonds half-matrix as an array
+          sizeof(PRECISION)); // write the 2D bonds-bonds half-matrix as an array
   outfile.write((char *)baEntropy,
                 nBonds * nAngles *
-                    sizeof(double)); // write the 2D bonds-angles matrix
+                    sizeof(PRECISION)); // write the 2D bonds-angles matrix
   outfile.write((char *)bdEntropy,
                 nBonds * nDihedrals *
-                    sizeof(double)); // write the 2D bonds-dihedrals matrix
+                    sizeof(PRECISION)); // write the 2D bonds-dihedrals matrix
   outfile.write(
       (char *)aaEntropy,
       nAngles * (nAngles - 1) / 2 *
-          sizeof(double)); // write the 2D angles-angles half-matrix as an array
+          sizeof(PRECISION)); // write the 2D angles-angles half-matrix as an array
   outfile.write((char *)adEntropy,
                 nAngles * nDihedrals *
-                    sizeof(double)); // write the 2D angles-dihedrals matrix
+                    sizeof(PRECISION)); // write the 2D angles-dihedrals matrix
   outfile.write((char *)ddEntropy,
                 nDihedrals * (nDihedrals - 1) / 2 *
-                    sizeof(double)); // write the 2D dihedrlas-dihedrals
+                    sizeof(PRECISION)); // write the 2D dihedrlas-dihedrals
                                      // half-matrix as an array
 }
 
@@ -994,15 +994,15 @@ void Entropy_Matrix::read_PAR_body() {
   int nAngles = nDihedrals + 1;
 
   bondsEntropy1D =
-      new double[nBonds]; // allocate storage for reading the .par file
-  anglesEntropy1D = new double[nAngles];
-  dihedralsEntropy1D = new double[nDihedrals];
-  bbEntropy = new double[nBonds * (nBonds - 1) / 2];
-  baEntropy = new double[nBonds * nAngles];
-  bdEntropy = new double[nBonds * nDihedrals];
-  aaEntropy = new double[nAngles * (nAngles - 1) / 2];
-  adEntropy = new double[nAngles * nDihedrals];
-  ddEntropy = new double[nDihedrals * (nDihedrals - 1) / 2];
+      new PRECISION[nBonds]; // allocate storage for reading the .par file
+  anglesEntropy1D = new PRECISION[nAngles];
+  dihedralsEntropy1D = new PRECISION[nDihedrals];
+  bbEntropy = new PRECISION[nBonds * (nBonds - 1) / 2];
+  baEntropy = new PRECISION[nBonds * nAngles];
+  bdEntropy = new PRECISION[nBonds * nDihedrals];
+  aaEntropy = new PRECISION[nAngles * (nAngles - 1) / 2];
+  adEntropy = new PRECISION[nAngles * nDihedrals];
+  ddEntropy = new PRECISION[nDihedrals * (nDihedrals - 1) / 2];
 
   if (!((bondsEntropy1D != NULL) && (anglesEntropy1D != NULL) &&
         (dihedralsEntropy1D != NULL) && (bbEntropy != NULL) &&
@@ -1014,17 +1014,17 @@ void Entropy_Matrix::read_PAR_body() {
   }
 
   infile.read((char *)bondsEntropy1D,
-              nBonds * sizeof(double)); // and the actually reads it in (see
+              nBonds * sizeof(PRECISION)); // and the actually reads it in (see
                                         // write_PAR_body for details)
-  infile.read((char *)anglesEntropy1D, nAngles * sizeof(double));
-  infile.read((char *)dihedralsEntropy1D, nDihedrals * sizeof(double));
-  infile.read((char *)bbEntropy, nBonds * (nBonds - 1) / 2 * sizeof(double));
-  infile.read((char *)baEntropy, nBonds * nAngles * sizeof(double));
-  infile.read((char *)bdEntropy, nBonds * nDihedrals * sizeof(double));
-  infile.read((char *)aaEntropy, nAngles * (nAngles - 1) / 2 * sizeof(double));
-  infile.read((char *)adEntropy, nAngles * nDihedrals * sizeof(double));
+  infile.read((char *)anglesEntropy1D, nAngles * sizeof(PRECISION));
+  infile.read((char *)dihedralsEntropy1D, nDihedrals * sizeof(PRECISION));
+  infile.read((char *)bbEntropy, nBonds * (nBonds - 1) / 2 * sizeof(PRECISION));
+  infile.read((char *)baEntropy, nBonds * nAngles * sizeof(PRECISION));
+  infile.read((char *)bdEntropy, nBonds * nDihedrals * sizeof(PRECISION));
+  infile.read((char *)aaEntropy, nAngles * (nAngles - 1) / 2 * sizeof(PRECISION));
+  infile.read((char *)adEntropy, nAngles * nDihedrals * sizeof(PRECISION));
   infile.read((char *)ddEntropy,
-              nDihedrals * (nDihedrals - 1) / 2 * sizeof(double));
+              nDihedrals * (nDihedrals - 1) / 2 * sizeof(PRECISION));
 }
 
 unsigned int Entropy_Matrix::getNBonds() { return nBonds; }

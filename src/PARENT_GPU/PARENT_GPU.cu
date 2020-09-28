@@ -38,7 +38,7 @@ public:
   unsigned int first_dof;
   unsigned int last_dof;
   unsigned int n_dofs;
-  unsigned long long int n_bytes;
+  size_t n_bytes;
   PRECISION *cpu_ram_start;
   PRECISION *gpu_ram_start;
 
@@ -441,7 +441,7 @@ public:
   unsigned int *histograms;
 
   GPU_RAM_Layout(unsigned int n_frames, unsigned int n_bins,
-                 unsigned long long int gpu_n_bytes, char *gpu_ram_start) {
+                 size_t gpu_n_bytes, char *gpu_ram_start) {
     // calculate the maximum number of dofs (for one of the two dof_blocks) so
     // that everything still fits into GPU RAM
     double a = 2 * n_frames * sizeof(PRECISION);
@@ -483,7 +483,7 @@ public:
   unsigned int *tmp_result_occupied_bins;
   double *tmp_read;
 
-  CPU_RAM_Layout(unsigned int n_frames, unsigned long long int cpu_n_bytes,
+  CPU_RAM_Layout(unsigned int n_frames, size_t cpu_n_bytes,
                  char *cpu_ram_start, unsigned int gpu_dofs_per_block,
                  unsigned int n_dihedrals) {
     unsigned int n_dofs_total = 3 * (n_dihedrals + 1);
@@ -547,17 +547,17 @@ class RAM {
 public:
   char *cpu_ram_start;
   char *cpu_ram_end;
-  unsigned long long int cpu_n_bytes;
+  size_t cpu_n_bytes;
   char *gpu_ram_start;
   char *gpu_ram_end;
-  unsigned long long int gpu_n_bytes;
+  size_t gpu_n_bytes;
   GPU_RAM_Layout *gpu_ram_layout;
   CPU_RAM_Layout *cpu_ram_layout;
   unsigned int n_dihedrals;
   unsigned int n_dofs_total;
   vector<CPU_RAM_Block> blocks;
 
-  RAM(unsigned long long int cpu_n_bytes, unsigned long long int gpu_n_bytes,
+  RAM(size_t cpu_n_bytes, size_t gpu_n_bytes,
       Bat *bat, unsigned int n_bins) {
     cpu_ram_start = new char[cpu_n_bytes];
     cpu_ram_end = cpu_ram_start + cpu_n_bytes - 1;
@@ -594,8 +594,8 @@ public:
   unsigned int n_dihedrals;
   Bat *bat;
 
-  PARENT_GPU(unsigned long long int cpu_n_bytes,
-             unsigned long long int gpu_n_bytes, char const *bat_str,
+  PARENT_GPU(size_t cpu_n_bytes,
+             size_t gpu_n_bytes, char const *bat_str,
              unsigned int n_bins, int threads_per_block) {
     this->threads_per_block = threads_per_block;
     this->n_bins = n_bins;
@@ -921,7 +921,7 @@ int main(int argc, char *argv[]) {
   int deviceCount;
   gpuErrchk(cudaGetDeviceCount(&deviceCount));
 
-  unsigned int device = 0; // TODO: implement choices for graphics card
+  unsigned int device = 1; // TODO: implement choices for graphics card
   cout << "Found " << deviceCount
        << " CUDA device(s). Chose CUDA device number " << device << "." << endl;
   struct cudaDeviceProp prop;
@@ -977,10 +977,10 @@ int main(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
   }
 
-  unsigned long long int cpu_ram_available =
-      static_cast<unsigned long long int>(1024) * 1024 * 1024 * 4;
-  unsigned long long int gpu_ram_available =
-      static_cast<unsigned long long int>(1024) * 1024 * 1024 * 1;
+  size_t cpu_ram_available =
+      static_cast<size_t>(1024) * 1024 * 1024 * 60;
+  size_t gpu_ram_available =
+      static_cast<size_t>(1024) * 1024 * 1024 * 7.5;
 
   PARENT_GPU parent_gpu(cpu_ram_available, gpu_ram_available,
                         arg_parser.get_cmd_option("-f"), n_bins,
