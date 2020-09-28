@@ -188,9 +188,9 @@ public:
       unsigned int b_counter_g = 0;
       unsigned int a_counter_g = a_start_g;
       unsigned int d_counter_g = d_start_g;
-      unsigned int b_counter_l = 0;
-      unsigned int a_counter_l = 0;
-      unsigned int d_counter_l = 0;
+      unsigned int b_counter_lt = 0;
+      unsigned int a_counter_lt = 0;
+      unsigned int d_counter_lt = 0;
 
       if (frame % 100000 == 0) {
         cout << "Reading frame " << frame
@@ -219,7 +219,7 @@ public:
       fail = fail | (file->rdstate() & std::ifstream::failbit);
       if ((b_counter_g >= type_id_start[TYPE_B]) &&
           (b_counter_g <= type_id_end[TYPE_B]))
-        bonds[b_counter_l++ * n_frames + frame] = ddummy[0];
+        bonds[b_counter_lt++ * n_frames + frame] = ddummy[0];
       b_counter_g++;
 
       file->read((char *)ddummy,
@@ -228,7 +228,7 @@ public:
       fail = fail | (file->rdstate() & std::ifstream::failbit);
       if ((b_counter_g >= type_id_start[TYPE_B]) &&
           (b_counter_g <= type_id_end[TYPE_B]))
-        bonds[b_counter_l++ * n_frames + frame] = ddummy[0];
+        bonds[b_counter_lt++ * n_frames + frame] = ddummy[0];
       b_counter_g++;
 
       file->read((char *)ddummy, inc); // and the angle between the two
@@ -236,7 +236,7 @@ public:
       fail = fail | (file->rdstate() & std::ifstream::failbit);
       if ((a_counter_g >= type_id_start[TYPE_A]) &&
           (a_counter_g <= type_id_end[TYPE_A]))
-        angles[a_counter_l++ * n_frames + frame] = ddummy[0];
+        angles[a_counter_lt++ * n_frames + frame] = ddummy[0];
       a_counter_g++;
 
       for (int i = 0; i < n_dihedrals;
@@ -246,7 +246,7 @@ public:
         fail = fail | (file->rdstate() & std::ifstream::failbit);
         if ((b_counter_g >= type_id_start[TYPE_B]) &&
             (b_counter_g <= type_id_end[TYPE_B]))
-          bonds[b_counter_l++ * n_frames + frame] = ddummy[0];
+          bonds[b_counter_lt++ * n_frames + frame] = ddummy[0];
         b_counter_g++;
 
         file->read((char *)ddummy, inc); // read the angle between the last
@@ -254,14 +254,14 @@ public:
         fail = fail | (file->rdstate() & std::ifstream::failbit);
         if ((a_counter_g >= type_id_start[TYPE_A]) &&
             (a_counter_g <= type_id_end[TYPE_A]))
-          angles[a_counter_l++ * n_frames + frame] = ddummy[0];
+          angles[a_counter_lt++ * n_frames + frame] = ddummy[0];
         a_counter_g++;
 
         file->read((char *)ddummy, inc); // and the value of the dihedral itself
         fail = fail | (file->rdstate() & std::ifstream::failbit);
         if ((d_counter_g >= type_id_start[TYPE_D]) &&
             (d_counter_g <= type_id_end[TYPE_D]))
-          dihedrals[d_counter_l++ * n_frames + frame] = ddummy[0];
+          dihedrals[d_counter_lt++ * n_frames + frame] = ddummy[0];
         d_counter_g++;
       }
     }
@@ -622,27 +622,57 @@ public:
   }
 
   void calculate_entropy() {
+    unsigned int skip = 0;
+    unsigned int skip_next = 0;
 
     for (unsigned int i = 0; i < ram->blocks.size() - 1; i++) {
-      cout << endl
+        skip = skip_next;
+        if((skip!=0) && (i==skip)){
+            cout << endl
+           << "Deploying Block " << i + 2 << " (dofs "
+           << ram->blocks[i].dof_id_start_g << " to " << ram->blocks[i].dof_id_end_g
+           << ") to RAM bank 1."
+           << endl;
+            ram->blocks[i+1].deploy(ram->cpu_ram_layout->dof_block_1);
+            
+        cout<<"Calculating Block "<<skip + 1<<"."<<endl;
+            calculate_block_cpu(&(ram->blocks[skip]));
+        
+        cout<<"Calculating Block pair "<<skip + 1<<" and "<<i+2<<"."<<endl;
+        calculate_block_pair_cpu(&(ram->blocks[skip]), &(ram->blocks[i+1]));
+            break;
+        }
+        else{
+            cout << endl
            << "Deploying Block " << i + 1 << " (dofs "
            << ram->blocks[i].dof_id_start_g << " to " << ram->blocks[i].dof_id_end_g
            << ") to RAM bank 1."
-           << endl; // TODO: think of more efficient deploying
-      ram->blocks[i].deploy(ram->cpu_ram_layout->dof_block_1);
-      calculate_block_cpu(&(ram->blocks[i]));
+           << endl;
+            ram->blocks[i].deploy(ram->cpu_ram_layout->dof_block_1);
+            cout<<"Calculating Block "<<i+1<<"."<<endl;
+            calculate_block_cpu(&(ram->blocks[i]));
+        }
+        
+        if(skip != 0){
+            calculate_block_pair_cpu(&(ram->blocks[i]), &(ram->blocks[skip]));
+             cout<<"Calculating Block pair "<<i+1<<" and "<<skip+1<<"."<<endl;
+        }
       for (unsigned int j = i + 1; j < ram->blocks.size(); j++) {
+        if(skip != j){
+            skip_next = j;
+            cout << endl
+                 << "Deploying Block " << j + 1 << " (dofs "
+                 << ram->blocks[j].dof_id_start_g << " to "
+                 << ram->blocks[j].dof_id_end_g << ") to RAM bank 2." << endl;
+            ram->blocks[j].deploy(ram->cpu_ram_layout->dof_block_2);
+            cout<<"Calculating Block pair "<<i+1<<" and "<<j+1<<"."<<endl;
+            calculate_block_pair_cpu(&(ram->blocks[i]), &(ram->blocks[j]));
+            
+        }
 
-        cout << endl
-             << "Deploying Block " << j + 1 << " (dofs "
-             << ram->blocks[j].dof_id_start_g << " to "
-             << ram->blocks[j].dof_id_end_g << ") to RAM bank 2." << endl;
-        ram->blocks[j].deploy(ram->cpu_ram_layout->dof_block_2);
-
-        calculate_block_pair_cpu(&(ram->blocks[i]), &(ram->blocks[j]));
       }
     }
-
+    cout<<"Calculating Block "<<ram->blocks.size()<<"."<<endl;
     calculate_block_cpu(&(ram->blocks[ram->blocks.size() - 1]));
   }
 
@@ -989,7 +1019,7 @@ int main(int argc, char *argv[]) {
   }
 
   size_t cpu_ram_available =
-      static_cast<size_t>(1024) * 1024 * 1024 * 60;
+      static_cast<size_t>(1024) * 1024 * 1024 * 3;
   size_t gpu_ram_available =
       static_cast<size_t>(1024) * 1024 * 1024 * 5.5;
 
