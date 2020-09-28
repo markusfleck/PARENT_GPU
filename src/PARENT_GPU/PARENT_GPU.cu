@@ -520,7 +520,7 @@ public:
     // the algorithm
     if (2 * dofs_per_block >= n_dofs_total) {
       dofs_per_block = n_dofs_total / 2;
-      dofs_per_block += n_dofs_total % 2;
+      dofs_per_block += n_dofs_total % 2; //TODO: In this case, only load the trajectory once
     }
 
     // set the pointers for partitioning the CPU RAM according to the calculated
@@ -625,7 +625,7 @@ public:
     unsigned int skip = 0;
     unsigned int skip_next = 0;
 
-    for (unsigned int i = 0; i < ram->blocks.size() - 1; i++) {
+    for (unsigned int i = 0; i < ram->blocks.size() - 1; i++) { //using this more complicated scheme, every but the first hard-dsik read is converted into a pair calculation
         skip = skip_next;
         if((skip!=0) && (i==skip)){
             cout << endl
@@ -678,19 +678,42 @@ public:
 
   void calculate_block_pair_cpu(CPU_RAM_Block *block1, CPU_RAM_Block *block2) {
     for (unsigned int k = 0; k < block1->blocks.size(); k++) {
+        block1->blocks[k].deploy(ram->gpu_ram_layout->dof_block_1);
       for (unsigned int l = 0; l < block2->blocks.size(); l++) {
+        block2->blocks[l].deploy(ram->gpu_ram_layout->dof_block_2);
         calculate_block_pair_gpu(&(block1->blocks[k]), &(block2->blocks[l]));
       }
     }
   }
 
-  void calculate_block_cpu(CPU_RAM_Block *block) {
-    for (unsigned int k = 0; k < block->blocks.size() - 1; k++) {
-      calculate_block_gpu(
-          &(block->blocks[k])); // TODO: think of more efficient deploying
-      for (unsigned int l = k + 1; l < block->blocks.size(); l++) {
-        calculate_block_pair_gpu(&(block->blocks[k]), &(block->blocks[l]));
-      }
+  void calculate_block_cpu(CPU_RAM_Block *block) { //play the same game as for the hard-disk loads in calculate_entropy() 
+  //TODO:does not yield significant performance gains, maybe revert for clearer code
+    unsigned int skip = 0;
+    unsigned int skip_next = 0;
+    
+    for (unsigned int i = 0; i < block->blocks.size() - 1; i++) {
+        skip = skip_next;
+        if((skip!=0) && (i==skip)){
+            block->blocks[i+1].deploy(ram->gpu_ram_layout->dof_block_1);
+            calculate_block_gpu(&(block->blocks[skip]));
+            calculate_block_pair_gpu(&(block->blocks[skip]), &(block->blocks[i+1]));
+            break;
+        }
+        else{
+            block->blocks[i].deploy(ram->gpu_ram_layout->dof_block_1);
+            calculate_block_gpu(&(block->blocks[i]));
+        }
+        if(skip != 0){
+            block->blocks[i].deploy(ram->gpu_ram_layout->dof_block_1);
+            calculate_block_pair_gpu(&(block->blocks[i]), &(block->blocks[skip]));
+        }
+        for (unsigned int j = i + 1; j < block->blocks.size(); j++) {
+            if(skip != j){
+                skip_next = j;
+                block->blocks[j].deploy(ram->gpu_ram_layout->dof_block_2);
+                calculate_block_pair_gpu(&(block->blocks[i]), &(block->blocks[j]));
+            }
+        }
     }
     calculate_block_gpu(&(block->blocks[block->blocks.size() - 1]));
   }
@@ -704,9 +727,6 @@ public:
   }
 
   void calculate_block_pair_gpu(GPU_RAM_Block *block1, GPU_RAM_Block *block2) {
-    // TODO: deploy both blocks at once
-    block1->deploy(ram->gpu_ram_layout->dof_block_1);
-    block2->deploy(ram->gpu_ram_layout->dof_block_2);
 
     size_t bytes_to_zero = ram->gpu_ram_layout->dofs_per_block;
     bytes_to_zero *=
@@ -829,9 +849,7 @@ public:
   }
 
   void calculate_block_gpu(GPU_RAM_Block *block) {
-    // TODO: Use already deployed blocks
-    block->deploy(ram->gpu_ram_layout->dof_block_1);
-
+    
     size_t bytes_to_zero = ram->gpu_ram_layout->dofs_per_block;
     bytes_to_zero *=
         ram->gpu_ram_layout->dofs_per_block *
@@ -1019,9 +1037,9 @@ int main(int argc, char *argv[]) {
   }
 
   size_t cpu_ram_available =
-      static_cast<size_t>(1024) * 1024 * 1024 * 3;
+      static_cast<size_t>(1024) * 1024 * 1024 * 2.5;
   size_t gpu_ram_available =
-      static_cast<size_t>(1024) * 1024 * 1024 * 5.5;
+      static_cast<size_t>(1024) * 1024 * 1024 * 1.0;
 
   PARENT_GPU parent_gpu(cpu_ram_available, gpu_ram_available,
                         arg_parser.get_cmd_option("-f"), n_bins,
