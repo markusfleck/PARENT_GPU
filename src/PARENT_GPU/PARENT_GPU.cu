@@ -32,24 +32,35 @@ inline void gpuAssert(cudaError_t return_code, const char *file, int line) {
 
 using namespace std;
 
+/* Variable names of the dofs:
+a _g suffix means that the variable is global. If there are 1000 atoms,
+there are 3 * 1000 - 6 = 2994 dofs. Thus, a _g variable would range from
+0 to 2993. A _l suffix means that the variable is local to the block.
+E.g., if the block starts at dof 300 and dof_g = 400, then dof_l = 100.
+A _t suffix (type) means that the variable either refers to only bonds, only 
+angles or only dihedrals. In our example, there are 1000 - 1 = 999 bonds
+and 1000 - 2 = 998 angles. So, if dof_g = 1050, then dof_gt = 1050 - 999 = 51.
+The order is bonds before angles, angles before dihedrals.
+ */
+
 class GPU_RAM_Block {
 public:
   unsigned char type;
-  unsigned int first_dof;
-  unsigned int last_dof;
+  unsigned int dof_id_start_g;
+  unsigned int dof_id_end_g;
   unsigned int n_dofs;
   size_t n_bytes;
   PRECISION *cpu_ram_start;
   PRECISION *gpu_ram_start;
 
-  GPU_RAM_Block(PRECISION *cpu_ram_start, unsigned int first_dof,
-                unsigned int last_dof, unsigned int n_frames,
+  GPU_RAM_Block(PRECISION *cpu_ram_start, unsigned int dof_id_start_g,
+                unsigned int dof_id_end_g, unsigned int n_frames,
                 unsigned int n_dihedrals) {
     this->cpu_ram_start = cpu_ram_start;
-    this->type = get_dof_type_from_id(first_dof, n_dihedrals);
-    this->first_dof = first_dof;
-    this->last_dof = last_dof;
-    n_dofs = last_dof - first_dof + 1;
+    this->type = get_dof_type_from_id(dof_id_start_g, n_dihedrals);
+    this->dof_id_start_g = dof_id_start_g;
+    this->dof_id_end_g = dof_id_end_g;
+    n_dofs = dof_id_end_g - dof_id_start_g + 1;
     n_bytes = n_dofs * n_frames * sizeof(PRECISION);
   }
 
@@ -62,8 +73,8 @@ public:
 
 class CPU_RAM_Block {
 public:
-  unsigned int dof_id_start;
-  unsigned int dof_id_end; // inclusive
+  unsigned int dof_id_start_g;
+  unsigned int dof_id_end_g; // inclusive
   unsigned int n_dofs;
   int type_id_start[3] = {-1, -1, -1};
   int type_id_end[3] = {-1, -1, -1}; // inclusive
@@ -86,14 +97,14 @@ public:
   PRECISION *dihedrals;
   Bat *bat;
 
-  CPU_RAM_Block(unsigned int dof_id_start, unsigned int dof_id_end,
+  CPU_RAM_Block(unsigned int dof_id_start_g, unsigned int dof_id_end_g,
                 unsigned int gpu_dofs_per_block, Bat *bat, PRECISION *minima,
                 PRECISION *maxima, unsigned int n_bins,
                 PRECISION *result_entropy1D) {
 
-    this->dof_id_start = dof_id_start;
-    this->dof_id_end = dof_id_end;
-    this->n_dofs = dof_id_end - dof_id_start + 1;
+    this->dof_id_start_g = dof_id_start_g;
+    this->dof_id_end_g = dof_id_end_g;
+    this->n_dofs = dof_id_end_g - dof_id_start_g + 1;
     this->n_dihedrals = bat->get_n_dihedrals();
     this->gpu_dofs_per_block = gpu_dofs_per_block;
     this->n_frames = bat->get_n_frames();
@@ -104,18 +115,18 @@ public:
     this->result_entropy1D = result_entropy1D;
     this->bat = bat;
 
-    for (unsigned short type = get_dof_type_from_id(dof_id_start, n_dihedrals);
-         type <= get_dof_type_from_id(dof_id_end, n_dihedrals); type++) {
-      if (dof_id_start < get_min_id_for_type(type, n_dihedrals)) {
+    for (unsigned short type = get_dof_type_from_id(dof_id_start_g, n_dihedrals);
+         type <= get_dof_type_from_id(dof_id_end_g, n_dihedrals); type++) {
+      if (dof_id_start_g < get_min_id_for_type(type, n_dihedrals)) {
         type_id_start[type] = get_min_id_for_type(type, n_dihedrals);
       } else {
-        type_id_start[type] = dof_id_start;
+        type_id_start[type] = dof_id_start_g;
       }
 
-      if (dof_id_end > get_max_id_for_type(type, n_dihedrals)) {
+      if (dof_id_end_g > get_max_id_for_type(type, n_dihedrals)) {
         type_id_end[type] = get_max_id_for_type(type, n_dihedrals);
       } else {
-        type_id_end[type] = dof_id_end;
+        type_id_end[type] = dof_id_end_g;
       }
       type_n_dofs[type] = type_id_end[type] - type_id_start[type] + 1;
 
@@ -145,8 +156,8 @@ public:
     }
 
     blocks.clear();
-    for (unsigned char type = get_dof_type_from_id(dof_id_start, n_dihedrals);
-         type <= get_dof_type_from_id(dof_id_end, n_dihedrals); type++) {
+    for (unsigned char type = get_dof_type_from_id(dof_id_start_g, n_dihedrals);
+         type <= get_dof_type_from_id(dof_id_end_g, n_dihedrals); type++) {
       for (unsigned int i = 0; i < gpu_ram_blocks_per_type[type]; i++) {
         unsigned int block_id_start =
             type_id_start[type] + i * gpu_dofs_per_block;
@@ -155,7 +166,7 @@ public:
         if (block_id_end > type_id_end[type])
           block_id_end = type_id_end[type];
         PRECISION *cpu_ram_start =
-            block_start + (block_id_start - dof_id_start) * n_frames;
+            block_start + (block_id_start - dof_id_start_g) * n_frames;
         blocks.push_back(*new GPU_RAM_Block(cpu_ram_start, block_id_start,
                                             block_id_end, n_frames,
                                             n_dihedrals));
@@ -172,14 +183,14 @@ public:
       // to read a frame from the .bat trajectory
       double ddummy[6];
       float fdummy[11];
-      unsigned int a_start = get_min_id_for_type(TYPE_A, n_dihedrals);
-      unsigned int d_start = get_min_id_for_type(TYPE_D, n_dihedrals);
-      unsigned int b_counter = 0;
-      unsigned int a_counter = a_start;
-      unsigned int d_counter = d_start;
-      unsigned int b_counter_local = 0;
-      unsigned int a_counter_local = 0;
-      unsigned int d_counter_local = 0;
+      unsigned int a_start_g = get_min_id_for_type(TYPE_A, n_dihedrals);
+      unsigned int d_start_g = get_min_id_for_type(TYPE_D, n_dihedrals);
+      unsigned int b_counter_g = 0;
+      unsigned int a_counter_g = a_start_g;
+      unsigned int d_counter_g = d_start_g;
+      unsigned int b_counter_l = 0;
+      unsigned int a_counter_l = 0;
+      unsigned int d_counter_l = 0;
 
       if (frame % 100000 == 0) {
         cout << "Reading frame " << frame
@@ -206,52 +217,52 @@ public:
                  inc); // read the lengths of the two bonds connecting the root
                        // atoms (internal coordinates)
       fail = fail | (file->rdstate() & std::ifstream::failbit);
-      if ((b_counter >= type_id_start[TYPE_B]) &&
-          (b_counter <= type_id_end[TYPE_B]))
-        bonds[b_counter_local++ * n_frames + frame] = ddummy[0];
-      b_counter++;
+      if ((b_counter_g >= type_id_start[TYPE_B]) &&
+          (b_counter_g <= type_id_end[TYPE_B]))
+        bonds[b_counter_l++ * n_frames + frame] = ddummy[0];
+      b_counter_g++;
 
       file->read((char *)ddummy,
                  inc); // read the lengths of the two bonds connecting the root
                        // atoms (internal coordinates)
       fail = fail | (file->rdstate() & std::ifstream::failbit);
-      if ((b_counter >= type_id_start[TYPE_B]) &&
-          (b_counter <= type_id_end[TYPE_B]))
-        bonds[b_counter_local++ * n_frames + frame] = ddummy[0];
-      b_counter++;
+      if ((b_counter_g >= type_id_start[TYPE_B]) &&
+          (b_counter_g <= type_id_end[TYPE_B]))
+        bonds[b_counter_l++ * n_frames + frame] = ddummy[0];
+      b_counter_g++;
 
       file->read((char *)ddummy, inc); // and the angle between the two
                                        // rootbonds (internal coordinates)
       fail = fail | (file->rdstate() & std::ifstream::failbit);
-      if ((a_counter >= type_id_start[TYPE_A]) &&
-          (a_counter <= type_id_end[TYPE_A]))
-        angles[a_counter_local++ * n_frames + frame] = ddummy[0];
-      a_counter++;
+      if ((a_counter_g >= type_id_start[TYPE_A]) &&
+          (a_counter_g <= type_id_end[TYPE_A]))
+        angles[a_counter_l++ * n_frames + frame] = ddummy[0];
+      a_counter_g++;
 
       for (int i = 0; i < n_dihedrals;
            i++) {                        // then for all dihedrals in the system
         file->read((char *)ddummy, inc); // read the bondlength between the last
                                          // two atoms in the dihedral
         fail = fail | (file->rdstate() & std::ifstream::failbit);
-        if ((b_counter >= type_id_start[TYPE_B]) &&
-            (b_counter <= type_id_end[TYPE_B]))
-          bonds[b_counter_local++ * n_frames + frame] = ddummy[0];
-        b_counter++;
+        if ((b_counter_g >= type_id_start[TYPE_B]) &&
+            (b_counter_g <= type_id_end[TYPE_B]))
+          bonds[b_counter_l++ * n_frames + frame] = ddummy[0];
+        b_counter_g++;
 
         file->read((char *)ddummy, inc); // read the angle between the last
                                          // threee atoms of the dihedral#
         fail = fail | (file->rdstate() & std::ifstream::failbit);
-        if ((a_counter >= type_id_start[TYPE_A]) &&
-            (a_counter <= type_id_end[TYPE_A]))
-          angles[a_counter_local++ * n_frames + frame] = ddummy[0];
-        a_counter++;
+        if ((a_counter_g >= type_id_start[TYPE_A]) &&
+            (a_counter_g <= type_id_end[TYPE_A]))
+          angles[a_counter_l++ * n_frames + frame] = ddummy[0];
+        a_counter_g++;
 
         file->read((char *)ddummy, inc); // and the value of the dihedral itself
         fail = fail | (file->rdstate() & std::ifstream::failbit);
-        if ((d_counter >= type_id_start[TYPE_D]) &&
-            (d_counter <= type_id_end[TYPE_D]))
-          dihedrals[d_counter_local++ * n_frames + frame] = ddummy[0];
-        d_counter++;
+        if ((d_counter_g >= type_id_start[TYPE_D]) &&
+            (d_counter_g <= type_id_end[TYPE_D]))
+          dihedrals[d_counter_l++ * n_frames + frame] = ddummy[0];
+        d_counter_g++;
       }
     }
 
@@ -358,7 +369,7 @@ public:
           }
         }
         if ((tmpMin < 0.0) || (tmpMax < 0.0)) {
-          cerr << "ERROR: Degree of freedom " << dof_id_start + j
+          cerr << "ERROR: Degree of freedom " << dof_id_start_g + j
                << " is smaller than 0.0" << endl;
           exit(EXIT_FAILURE);
         }
@@ -372,8 +383,8 @@ public:
         if ((tmpMax - tmpMin) < 1.0e-4) {
           tmpMax += 0.05;
         }
-        minima[dof_id_start + j] = tmpMin; // and store the calculated values
-        maxima[dof_id_start + j] = tmpMax;
+        minima[dof_id_start_g + j] = tmpMin; // and store the calculated values
+        maxima[dof_id_start_g + j] = tmpMax;
       }
     }
   }
@@ -385,7 +396,7 @@ public:
       long long int histo[n_bins];
       int occupbins;
 #pragma omp for
-      for (int j = dof_id_start; j <= dof_id_end;
+      for (int j = dof_id_start_g; j <= dof_id_end_g;
            j++) { // for all dofs (using threads)
         for (int k = 0; k < n_bins; k++) {
           histo[k] = 0; // initialize a histogram with zeros
@@ -395,7 +406,7 @@ public:
         for (int i = 0; i < n_frames;
              i++) { // and fill the histogram using all frames of the trajectory
           histo[int(
-              (block_start[(j - dof_id_start) * n_frames + i] - minima[j]) /
+              (block_start[(j - dof_id_start_g) * n_frames + i] - minima[j]) /
               binsize)] += 1;
         }
         occupbins = 0; // then use the histogram to calculate the (discretized)
@@ -574,11 +585,11 @@ public:
                            gpu_ram_layout->dofs_per_block, n_dihedrals);
     for (unsigned int i = 0; i < n_dofs_total;
          i += cpu_ram_layout->dofs_per_block) {
-      unsigned int end = i + cpu_ram_layout->dofs_per_block - 1;
-      if (end > n_dofs_total - 1)
-        end = n_dofs_total - 1;
+      unsigned int end_g = i + cpu_ram_layout->dofs_per_block - 1;
+      if (end_g > n_dofs_total - 1)
+        end_g = n_dofs_total - 1;
       blocks.push_back(*new CPU_RAM_Block(
-          i, end, gpu_ram_layout->dofs_per_block, bat, cpu_ram_layout->minima,
+          i, end_g, gpu_ram_layout->dofs_per_block, bat, cpu_ram_layout->minima,
           cpu_ram_layout->maxima, n_bins, cpu_ram_layout->result_entropy1D));
     }
   }
@@ -615,7 +626,7 @@ public:
     for (unsigned int i = 0; i < ram->blocks.size() - 1; i++) {
       cout << endl
            << "Deploying Block " << i + 1 << " (dofs "
-           << ram->blocks[i].dof_id_start << " to " << ram->blocks[i].dof_id_end
+           << ram->blocks[i].dof_id_start_g << " to " << ram->blocks[i].dof_id_end_g
            << ") to RAM bank 1."
            << endl; // TODO: think of more efficient deploying
       ram->blocks[i].deploy(ram->cpu_ram_layout->dof_block_1);
@@ -624,8 +635,8 @@ public:
 
         cout << endl
              << "Deploying Block " << j + 1 << " (dofs "
-             << ram->blocks[j].dof_id_start << " to "
-             << ram->blocks[j].dof_id_end << ") to RAM bank 2." << endl;
+             << ram->blocks[j].dof_id_start_g << " to "
+             << ram->blocks[j].dof_id_end_g << ") to RAM bank 2." << endl;
         ram->blocks[j].deploy(ram->cpu_ram_layout->dof_block_2);
 
         calculate_block_pair_cpu(&(ram->blocks[i]), &(ram->blocks[j]));
@@ -679,15 +690,15 @@ public:
 
     for (unsigned int i = 0; i < block1->n_dofs; i++) {
       for (unsigned int j = 0; j < block2->n_dofs; j++) {
-        unsigned int dof1 = i + block1->first_dof;
-        unsigned int dof2 = j + block2->first_dof;
-        PRECISION min1 = ram->cpu_ram_layout->minima[dof1];
-        PRECISION min2 = ram->cpu_ram_layout->minima[dof2];
+        unsigned int dof1_g = i + block1->dof_id_start_g;
+        unsigned int dof2_g = j + block2->dof_id_start_g;
+        PRECISION min1 = ram->cpu_ram_layout->minima[dof1_g];
+        PRECISION min2 = ram->cpu_ram_layout->minima[dof2_g];
 
         PRECISION bin_size1 =
-            (ram->cpu_ram_layout->maxima[dof1] - min1) / n_bins;
+            (ram->cpu_ram_layout->maxima[dof1_g] - min1) / n_bins;
         PRECISION bin_size2 =
-            (ram->cpu_ram_layout->maxima[dof2] - min2) / n_bins;
+            (ram->cpu_ram_layout->maxima[dof2_g] - min2) / n_bins;
         unsigned int *histogram = ram->gpu_ram_layout->histograms +
                                   (i * block2->n_dofs + j) * n_bins * n_bins;
         int blocks = n_frames / threads_per_block;
@@ -704,15 +715,15 @@ public:
 
     for (unsigned int i = 0; i < block1->n_dofs; i++) {
       for (unsigned int j = 0; j < block2->n_dofs; j++) {
-        unsigned int dof1 = i + block1->first_dof;
-        unsigned int dof2 = j + block2->first_dof;
-        PRECISION min1 = ram->cpu_ram_layout->minima[dof1];
-        PRECISION min2 = ram->cpu_ram_layout->minima[dof2];
+        unsigned int dof1_g = i + block1->dof_id_start_g;
+        unsigned int dof2_g = j + block2->dof_id_start_g;
+        PRECISION min1 = ram->cpu_ram_layout->minima[dof1_g];
+        PRECISION min2 = ram->cpu_ram_layout->minima[dof2_g];
 
         PRECISION bin_size1 =
-            (ram->cpu_ram_layout->maxima[dof1] - min1) / n_bins;
+            (ram->cpu_ram_layout->maxima[dof1_g] - min1) / n_bins;
         PRECISION bin_size2 =
-            (ram->cpu_ram_layout->maxima[dof2] - min2) / n_bins;
+            (ram->cpu_ram_layout->maxima[dof2_g] - min2) / n_bins;
 
         unsigned int *histogram = ram->gpu_ram_layout->histograms +
                                   (i * block2->n_dofs + j) * n_bins * n_bins;
@@ -771,9 +782,9 @@ public:
 
     for (unsigned int i = 0; i < block1->n_dofs; i++) {
       for (unsigned int j = 0; j < block2->n_dofs; j++) {
-        unsigned int dof1 = i + block1->first_dof -
+        unsigned int dof1_gt = i + block1->dof_id_start_g -
                             get_min_id_for_type(block1->type, n_dihedrals);
-        unsigned int dof2 = j + block2->first_dof -
+        unsigned int dof2_gt = j + block2->dof_id_start_g -
                             get_min_id_for_type(block2->type, n_dihedrals);
         double entropy =
             -ram->cpu_ram_layout->tmp_result_entropy[i * block2->n_dofs + j] +
@@ -781,7 +792,7 @@ public:
                  ->tmp_result_occupied_bins[i * block2->n_dofs + j] -
              1.0) /
                 (2.0 * n_frames);
-        ent_mat->set2DEntropy(block1->type, block2->type, dof1 + 1, dof2 + 1,
+        ent_mat->set2DEntropy(block1->type, block2->type, dof1_gt + 1, dof2_gt + 1,
                               entropy);
       }
     }
@@ -803,15 +814,15 @@ public:
 
     for (unsigned int i = 0; i < block->n_dofs - 1; i++) {
       for (unsigned int j = i + 1; j < block->n_dofs; j++) {
-        unsigned int dof1 = i + block->first_dof;
-        unsigned int dof2 = j + block->first_dof;
-        PRECISION min1 = ram->cpu_ram_layout->minima[dof1];
-        PRECISION min2 = ram->cpu_ram_layout->minima[dof2];
+        unsigned int dof1_g = i + block->dof_id_start_g;
+        unsigned int dof2_g = j + block->dof_id_start_g;
+        PRECISION min1 = ram->cpu_ram_layout->minima[dof1_g];
+        PRECISION min2 = ram->cpu_ram_layout->minima[dof2_g];
 
         PRECISION bin_size1 =
-            (ram->cpu_ram_layout->maxima[dof1] - min1) / n_bins;
+            (ram->cpu_ram_layout->maxima[dof1_g] - min1) / n_bins;
         PRECISION bin_size2 =
-            (ram->cpu_ram_layout->maxima[dof2] - min2) / n_bins;
+            (ram->cpu_ram_layout->maxima[dof2_g] - min2) / n_bins;
         unsigned int *histogram = ram->gpu_ram_layout->histograms +
                                   (i * block->n_dofs + j) * n_bins * n_bins;
         int blocks = n_frames / threads_per_block;
@@ -828,15 +839,15 @@ public:
 
     for (unsigned int i = 0; i < block->n_dofs - 1; i++) {
       for (unsigned int j = i + 1; j < block->n_dofs; j++) {
-        unsigned int dof1 = i + block->first_dof;
-        unsigned int dof2 = j + block->first_dof;
-        PRECISION min1 = ram->cpu_ram_layout->minima[dof1];
-        PRECISION min2 = ram->cpu_ram_layout->minima[dof2];
+        unsigned int dof1_g = i + block->dof_id_start_g;
+        unsigned int dof2_g = j + block->dof_id_start_g;
+        PRECISION min1 = ram->cpu_ram_layout->minima[dof1_g];
+        PRECISION min2 = ram->cpu_ram_layout->minima[dof2_g];
 
         PRECISION bin_size1 =
-            (ram->cpu_ram_layout->maxima[dof1] - min1) / n_bins;
+            (ram->cpu_ram_layout->maxima[dof1_g] - min1) / n_bins;
         PRECISION bin_size2 =
-            (ram->cpu_ram_layout->maxima[dof2] - min2) / n_bins;
+            (ram->cpu_ram_layout->maxima[dof2_g] - min2) / n_bins;
 
         unsigned int *histogram = ram->gpu_ram_layout->histograms +
                                   (i * block->n_dofs + j) * n_bins * n_bins;
@@ -895,9 +906,9 @@ public:
 
     for (unsigned int i = 0; i < block->n_dofs - 1; i++) {
       for (unsigned int j = i + 1; j < block->n_dofs; j++) {
-        unsigned int dof1 = i + block->first_dof -
+        unsigned int dof1_gt = i + block->dof_id_start_g -
                             get_min_id_for_type(block->type, n_dihedrals);
-        unsigned int dof2 = j + block->first_dof -
+        unsigned int dof2_gt = j + block->dof_id_start_g -
                             get_min_id_for_type(block->type, n_dihedrals);
         double entropy =
             -ram->cpu_ram_layout->tmp_result_entropy[i * block->n_dofs + j] +
@@ -905,7 +916,7 @@ public:
                  ->tmp_result_occupied_bins[i * block->n_dofs + j] -
              1.0) /
                 (2.0 * n_frames); // includes Herzel entropy unbiasing
-        ent_mat->set2DEntropy(block->type, block->type, dof1 + 1, dof2 + 1,
+        ent_mat->set2DEntropy(block->type, block->type, dof1_gt + 1, dof2_gt + 1,
                               entropy);
       }
     }
@@ -921,7 +932,7 @@ int main(int argc, char *argv[]) {
   int deviceCount;
   gpuErrchk(cudaGetDeviceCount(&deviceCount));
 
-  unsigned int device = 1; // TODO: implement choices for graphics card
+  unsigned int device = 0; // TODO: implement choices for graphics card
   cout << "Found " << deviceCount
        << " CUDA device(s). Chose CUDA device number " << device << "." << endl;
   struct cudaDeviceProp prop;
@@ -980,7 +991,7 @@ int main(int argc, char *argv[]) {
   size_t cpu_ram_available =
       static_cast<size_t>(1024) * 1024 * 1024 * 60;
   size_t gpu_ram_available =
-      static_cast<size_t>(1024) * 1024 * 1024 * 7.5;
+      static_cast<size_t>(1024) * 1024 * 1024 * 5.5;
 
   PARENT_GPU parent_gpu(cpu_ram_available, gpu_ram_available,
                         arg_parser.get_cmd_option("-f"), n_bins,

@@ -24,11 +24,11 @@ g++ -c src/BAT_builder/BAT_trajectory.cpp -o obj/BAT_trajectory.o -Wall
 g++ src/BAT_builder/bat.cpp obj/xdrfile.o  obj/xdrfile_xtc.o obj/io.o obj/topology.o obj/BAT_topology.o obj/BAT_trajectory.o  obj/util.o -o bin/BAT_builder -Wall
 g++ --std=c++11 -O3 src/process_output/get_values_from_PAR.cpp obj/io.o obj/util.o -o bin/get_values_from_PAR -Wall
 
-#~ bin/BAT_builder -t complexes/1UGH/1UGH.top -x complexes/1UGH/1UGH.xtc -o complexes/output/1UGH.bat -bb "CA C N H1 O1"
+#~ #bin/BAT_builder -t complexes/1UGH/1UGH.top -x complexes/1UGH/1UGH.xtc -o complexes/output/1UGH.bat -bb "CA C N H1 O1"
 
 nvcc --std=c++11 -O3 -Xptxas -O3 -gencode=arch=compute_61,code=\"sm_61,compute_61\" src/PARENT_GPU/PARENT_GPU.cu obj/io.o obj/util.o -o bin/PARENT_GPU \
-&& bin/PARENT_GPU -f devel/traj/UBM2_1.bat -o output/UBM2.par -b 50 \
-&& output/UBM2_1.par --short 
+&& bin/PARENT_GPU -f devel/traj/UBM2_1.bat -o output/UBM2_1.par -b 50 \
+&& bin/get_values_from_PAR -p output/UBM2_1.par --short 
 
 
 
