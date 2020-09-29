@@ -1,4 +1,4 @@
-#define PRECISION double
+#define PRECISION float
 #define MODFITNBINS 100
 #define WARPMULTIPLES 1
 #define MEMORY_USAGE 0.8 // GPU
@@ -1037,9 +1037,9 @@ int main(int argc, char *argv[]) {
   }
 
   size_t cpu_ram_available =
-      static_cast<size_t>(1024) * 1024 * 1024 * 2.5;
+      static_cast<size_t>(1024) * 1024 * 1024 * 58;
   size_t gpu_ram_available =
-      static_cast<size_t>(1024) * 1024 * 1024 * 1.0;
+      static_cast<size_t>(1024) * 1024 * 1024 * 7.5;
 
   PARENT_GPU parent_gpu(cpu_ram_available, gpu_ram_available,
                         arg_parser.get_cmd_option("-f"), n_bins,
