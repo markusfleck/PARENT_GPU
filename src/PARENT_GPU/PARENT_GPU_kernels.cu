@@ -1,3 +1,15 @@
+// #define FAST_MATH
+#ifdef FAST_MATH
+    #define COS __cosf
+    #define SIN __sinf
+    #define EXP __expf
+    #define LOG __logf
+#else 
+    #define COS cos
+    #define SIN sin
+    #define EXP exp
+    #define LOG log
+#endif
 
 
 __global__ void cu_bondEnt(PRECISION *d_bondsEntropy1DMaster,
@@ -37,7 +49,7 @@ __global__ void cu_bondEnt(PRECISION *d_bondsEntropy1DMaster,
   for (int k = 0; k < bDens1D; k++) {
     probDens = histo[offset_histo + k] / (numFrames * binsize * blen * blen);
     if (probDens > 0) {
-      plnpsum = plnpsum + blen * blen * probDens * log(probDens);
+      plnpsum = plnpsum + blen * blen * probDens * LOG(probDens);
       occupbins = occupbins + 1;
     }
     blen += binsize;
@@ -83,9 +95,9 @@ __global__ void cu_angleEnt(PRECISION *d_anglesEntropy1DMaster,
   plnpsum = 0;
   theta = d_minAngles[idx] + (binsize / 2.0);
   for (int k = 0; k < aDens1D; k++) {
-    probDens = histo[offset_histo + k] / (numFrames * binsize * sin(theta));
+    probDens = histo[offset_histo + k] / (numFrames * binsize * SIN(theta));
     if (probDens > 0) {
-      plnpsum = plnpsum + sin(theta) * probDens * log(probDens);
+      plnpsum = plnpsum + SIN(theta) * probDens * LOG(probDens);
       occupbins = occupbins + 1;
     }
     theta += binsize;
@@ -132,7 +144,7 @@ cu_dihedralEnt(PRECISION *d_dihedralsEntropy1DMaster, PRECISION *d_minDihedrals,
   for (int k = 0; k < dDens1D; k++) {
     probDens = histo[offset_histo + k] / (numFrames * binsize);
     if (probDens > 0) {
-      plnpsum = plnpsum + probDens * log(probDens);
+      plnpsum = plnpsum + probDens * LOG(probDens);
       occupbins = occupbins + 1;
     }
   }
@@ -186,9 +198,9 @@ __global__ void cu_baEnt(unsigned int *histo, const int numFrames,
     PRECISION blen = min1 + binSize1 / 2.0 + binSize1 * (idx / bins2);
     PRECISION theta = min2 + binSize2 / 2.0 + binSize2 * (idx % bins2);
     PRECISION probDens = histo[idx] / (numFrames * binSize1 * binSize2 * blen *
-                                       blen * sin(theta));
+                                       blen * SIN(theta));
     if (probDens > 0) {
-      atomicAdd(plnpsum, blen * blen * sin(theta) * probDens * log(probDens) *
+      atomicAdd(plnpsum, blen * blen * SIN(theta) * probDens * LOG(probDens) *
                              binSize1 * binSize2);
       atomicAdd(occupbins, 1);
     }
@@ -209,7 +221,7 @@ __global__ void cu_bdEnt(unsigned int *histo, const int numFrames,
         histo[idx] / (numFrames * binSize1 * binSize2 * blen * blen);
     if (probDens > 0) {
       atomicAdd(plnpsum,
-                blen * blen * probDens * log(probDens) * binSize1 * binSize2);
+                blen * blen * probDens * LOG(probDens) * binSize1 * binSize2);
       atomicAdd(occupbins, 1);
     }
     idx += offset;
@@ -226,10 +238,10 @@ __global__ void cu_adEnt(unsigned int *histo, const int numFrames,
   while (idx < bins1 * bins2) {
     PRECISION theta = min1 + binSize1 / 2.0 + binSize1 * (idx / bins2);
     PRECISION probDens =
-        histo[idx] / (numFrames * binSize1 * binSize2 * sin(theta));
+        histo[idx] / (numFrames * binSize1 * binSize2 * SIN(theta));
     if (probDens > 0) {
       atomicAdd(plnpsum,
-                sin(theta) * probDens * log(probDens) * binSize1 * binSize2);
+                SIN(theta) * probDens * LOG(probDens) * binSize1 * binSize2);
       atomicAdd(occupbins, 1);
     }
     idx += offset;
@@ -250,7 +262,7 @@ __global__ void cu_bbEnt(unsigned int *histo, const int numFrames,
                                        blen1 * blen2 * blen2);
     if (probDens > 0) {
       atomicAdd(plnpsum, blen1 * blen1 * blen2 * blen2 * probDens *
-                             log(probDens) * binSize1 * binSize2);
+                             LOG(probDens) * binSize1 * binSize2);
       atomicAdd(occupbins, 1);
     }
     idx += offset;
@@ -268,9 +280,9 @@ __global__ void cu_aaEnt(unsigned int *histo, const int numFrames,
     PRECISION theta1 = min1 + binSize1 / 2.0 + binSize1 * (idx / bins);
     PRECISION theta2 = min2 + binSize2 / 2.0 + binSize2 * (idx % bins);
     PRECISION probDens = histo[idx] / (numFrames * binSize1 * binSize2 *
-                                       sin(theta1) * sin(theta2));
+                                       SIN(theta1) * SIN(theta2));
     if (probDens > 0) {
-      atomicAdd(plnpsum, sin(theta1) * sin(theta2) * probDens * log(probDens) *
+      atomicAdd(plnpsum, SIN(theta1) * SIN(theta2) * probDens * LOG(probDens) *
                              binSize1 * binSize2);
       atomicAdd(occupbins, 1);
     }
@@ -287,7 +299,7 @@ __global__ void cu_ddEnt(unsigned int *histo, const int numFrames,
   while (idx < bins * bins) {
     PRECISION probDens = histo[idx] / (numFrames * binSize1 * binSize2);
     if (probDens > 0) {
-      atomicAdd(plnpsum, probDens * log(probDens) * binSize1 * binSize2);
+      atomicAdd(plnpsum, probDens * LOG(probDens) * binSize1 * binSize2);
       atomicAdd(occupbins, 1);
     }
     idx += offset;

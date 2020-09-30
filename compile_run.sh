@@ -24,11 +24,11 @@ g++ -c src/BAT_builder/BAT_trajectory.cpp -o obj/BAT_trajectory.o -Wall
 g++ src/BAT_builder/bat.cpp obj/xdrfile.o  obj/xdrfile_xtc.o obj/io.o obj/topology.o obj/BAT_topology.o obj/BAT_trajectory.o  obj/util.o -o bin/BAT_builder -Wall
 g++ --std=c++11 -O3 src/process_output/get_values_from_PAR.cpp obj/io.o obj/util.o -o bin/get_values_from_PAR -Wall
 
-#~ bin/BAT_builder -t complexes/1AKZ/1AKZ.top -x complexes/1AKZ/1AKZ.xtc -o complexes/output/1AKZ.bat -bb "CA C N H1 O1"
+#~ bin/BAT_builder -t complexes/1UGI/1UGI.top -x complexes/1UGI/1UGI.xtc -o complexes/output/1UGI.bat -bb "CA C N H1 O1"
 
 nvcc --std=c++11 -O3 -Xptxas -O3 -gencode=arch=compute_61,code=\"sm_61,compute_61\" src/PARENT_GPU/PARENT_GPU.cu obj/io.o obj/util.o -o bin/PARENT_GPU \
-&& bin/PARENT_GPU -f complexes/output/1AKZ.bat -o complexes/output/single_prec/1AKZ.par -b 50 \
-&& bin/get_values_from_PAR -p complexes/output/single_prec/1AKZ.par --short 
+&& bin/PARENT_GPU -f complexes/output/1UGI.bat -o complexes/output/fast_math/1UGI.par -b 50 \
+&& bin/get_values_from_PAR -p complexes/output/fast_math/1UGI.par --short 
 
 
 

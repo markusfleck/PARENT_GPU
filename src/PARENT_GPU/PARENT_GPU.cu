@@ -1,4 +1,4 @@
-#define PRECISION float
+#define PRECISION double
 #define MODFITNBINS 100
 #define WARPMULTIPLES 1
 #define MEMORY_USAGE 0.8 // GPU

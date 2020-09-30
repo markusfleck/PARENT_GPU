@@ -25,7 +25,7 @@
 #ifndef ENTROPY_MATRIX_H
 #define ENTROPY_MATRIX_H
 
-#define PRECISION float
+#define PRECISION double
 
 #include "../util.h"
 #include <fstream>
