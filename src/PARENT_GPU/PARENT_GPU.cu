@@ -4,6 +4,7 @@
 #define MEMORY_USAGE 0.8 // GPU
 #define RAM_USAGE 0.8    // CPU
 #define DEBUG false
+#define N_STREAMS 16
 
 #include <cmath>
 #include <cstddef>
@@ -738,8 +739,15 @@ public:
                    // ram->gpu_ram_layout->dofs_per_block)
     gpuErrchk(cudaMemset(ram->gpu_ram_layout->result, 0, bytes_to_zero));
 
+
+    cudaStream_t streams[N_STREAMS];
+    for (unsigned int i = 0; i < N_STREAMS; i++) {
+        cudaStreamCreate(streams + i);
+    }
+    
     for (unsigned int i = 0; i < block1->n_dofs; i++) {
       for (unsigned int j = 0; j < block2->n_dofs; j++) {
+        
         unsigned int dof1_g = i + block1->dof_id_start_g;
         unsigned int dof2_g = j + block2->dof_id_start_g;
         PRECISION min1 = ram->cpu_ram_layout->minima[dof1_g];
@@ -754,14 +762,19 @@ public:
         int blocks = n_frames / threads_per_block;
         if (n_frames % threads_per_block > 0)
           blocks++;
-        histo2D<<<blocks, threads_per_block>>>(
+        histo2D<<<blocks, threads_per_block, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(
             block1->gpu_ram_start + i * n_frames,
             block2->gpu_ram_start + j * n_frames, n_frames, histogram, n_bins,
             bin_size1, bin_size2, min1, min2);
       }
     }
-    gpuErrchk(cudaPeekAtLastError());
-    gpuErrchk(cudaDeviceSynchronize());
+    //gpuErrchk(cudaPeekAtLastError());
+    //gpuErrchk(cudaDeviceSynchronize());
+    //for (unsigned int i = 0; i < N_STREAMS; i++) {
+    //    cudaStreamDestroy(streams[i]);
+    //}
+    //gpuErrchk(cudaPeekAtLastError());
+    
 
     for (unsigned int i = 0; i < block1->n_dofs; i++) {
       for (unsigned int j = 0; j < block2->n_dofs; j++) {
@@ -787,32 +800,32 @@ public:
 
         switch (get_pair_type(block1->type, block2->type)) {
         case (TYPE_BB):
-          cu_bbEnt<<<blocks, threads_per_block>>>(histogram, n_frames, n_bins,
+          cu_bbEnt<<<blocks, threads_per_block, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
                                                   bin_size1, bin_size2, min1,
                                                   min2, plnpsum, occupbins);
           break;
         case (TYPE_BA):
-          cu_baEnt<<<blocks, threads_per_block>>>(
+          cu_baEnt<<<blocks, threads_per_block, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(
               histogram, n_frames, n_bins, n_bins, bin_size1, bin_size2, min1,
               min2, plnpsum, occupbins);
           break;
         case (TYPE_BD):
-          cu_bdEnt<<<blocks, threads_per_block>>>(histogram, n_frames, n_bins,
+          cu_bdEnt<<<blocks, threads_per_block, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
                                                   n_bins, bin_size1, bin_size2,
                                                   min1, plnpsum, occupbins);
           break;
         case (TYPE_AA):
-          cu_aaEnt<<<blocks, threads_per_block>>>(histogram, n_frames, n_bins,
+          cu_aaEnt<<<blocks, threads_per_block, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
                                                   bin_size1, bin_size2, min1,
                                                   min2, plnpsum, occupbins);
           break;
         case (TYPE_AD):
-          cu_adEnt<<<blocks, threads_per_block>>>(histogram, n_frames, n_bins,
+          cu_adEnt<<<blocks, threads_per_block, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
                                                   n_bins, bin_size1, bin_size2,
                                                   min1, plnpsum, occupbins);
           break;
         case (TYPE_DD):
-          cu_ddEnt<<<blocks, threads_per_block>>>(histogram, n_frames, n_bins,
+          cu_ddEnt<<<blocks, threads_per_block, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
                                                   bin_size1, bin_size2, plnpsum,
                                                   occupbins);
           break;
@@ -821,6 +834,10 @@ public:
     }
     gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaDeviceSynchronize());
+    for (unsigned int i = 0; i < N_STREAMS; i++) {
+        cudaStreamDestroy(streams[i]);
+    }
+    gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaMemcpy(ram->cpu_ram_layout->tmp_result_entropy,
                          ram->gpu_ram_layout->result,
                          block1->n_dofs * block2->n_dofs * sizeof(PRECISION),
@@ -859,6 +876,11 @@ public:
               1)); // TODO: zero only what is needed(block1->n_dofs instead of
                    // ram->gpu_ram_layout->dofs_per_block)
     gpuErrchk(cudaMemset(ram->gpu_ram_layout->result, 0, bytes_to_zero));
+  
+    cudaStream_t streams[N_STREAMS];
+    for (unsigned int i = 0; i < N_STREAMS; i++) {
+        cudaStreamCreate(streams + i);
+    }
 
     for (unsigned int i = 0; i < block->n_dofs - 1; i++) {
       for (unsigned int j = i + 1; j < block->n_dofs; j++) {
@@ -876,14 +898,18 @@ public:
         int blocks = n_frames / threads_per_block;
         if (n_frames % threads_per_block > 0)
           blocks++;
-        histo2D<<<blocks, threads_per_block>>>(
+        histo2D<<<blocks, threads_per_block, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(
             block->gpu_ram_start + i * n_frames,
             block->gpu_ram_start + j * n_frames, n_frames, histogram, n_bins,
             bin_size1, bin_size2, min1, min2);
       }
     }
-    gpuErrchk(cudaPeekAtLastError());
-    gpuErrchk(cudaDeviceSynchronize());
+    //gpuErrchk(cudaPeekAtLastError());
+    //gpuErrchk(cudaDeviceSynchronize());
+    //for (unsigned int i = 0; i < N_STREAMS; i++) {
+    //    cudaStreamDestroy(streams[i]);
+    //}
+    //gpuErrchk(cudaPeekAtLastError());
 
     for (unsigned int i = 0; i < block->n_dofs - 1; i++) {
       for (unsigned int j = i + 1; j < block->n_dofs; j++) {
@@ -909,32 +935,32 @@ public:
 
         switch (get_pair_type(block->type, block->type)) {
         case (TYPE_BB):
-          cu_bbEnt<<<blocks, threads_per_block>>>(histogram, n_frames, n_bins,
+          cu_bbEnt<<<blocks, threads_per_block, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
                                                   bin_size1, bin_size2, min1,
                                                   min2, plnpsum, occupbins);
           break;
         case (TYPE_BA):
-          cu_baEnt<<<blocks, threads_per_block>>>(
+          cu_baEnt<<<blocks, threads_per_block, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(
               histogram, n_frames, n_bins, n_bins, bin_size1, bin_size2, min1,
               min2, plnpsum, occupbins);
           break;
         case (TYPE_BD):
-          cu_bdEnt<<<blocks, threads_per_block>>>(histogram, n_frames, n_bins,
+          cu_bdEnt<<<blocks, threads_per_block, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
                                                   n_bins, bin_size1, bin_size2,
                                                   min1, plnpsum, occupbins);
           break;
         case (TYPE_AA):
-          cu_aaEnt<<<blocks, threads_per_block>>>(histogram, n_frames, n_bins,
+          cu_aaEnt<<<blocks, threads_per_block, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
                                                   bin_size1, bin_size2, min1,
                                                   min2, plnpsum, occupbins);
           break;
         case (TYPE_AD):
-          cu_adEnt<<<blocks, threads_per_block>>>(histogram, n_frames, n_bins,
+          cu_adEnt<<<blocks, threads_per_block, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
                                                   n_bins, bin_size1, bin_size2,
                                                   min1, plnpsum, occupbins);
           break;
         case (TYPE_DD):
-          cu_ddEnt<<<blocks, threads_per_block>>>(histogram, n_frames, n_bins,
+          cu_ddEnt<<<blocks, threads_per_block, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
                                                   bin_size1, bin_size2, plnpsum,
                                                   occupbins);
           break;
@@ -943,10 +969,14 @@ public:
     }
     gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaDeviceSynchronize());
+    for (unsigned int i = 0; i < N_STREAMS; i++) {
+        cudaStreamDestroy(streams[i]);
+    }
+    gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaMemcpy(ram->cpu_ram_layout->tmp_result_entropy,
                          ram->gpu_ram_layout->result,
                          block->n_dofs * block->n_dofs * sizeof(PRECISION),
-                         cudaMemcpyDeviceToHost)); // TODO: use GPU fwd block
+                         cudaMemcpyDeviceToHost));
     gpuErrchk(cudaMemcpy(ram->cpu_ram_layout->tmp_result_occupied_bins,
                          ram->gpu_ram_layout->occupied_bins,
                          block->n_dofs * block->n_dofs * sizeof(PRECISION),
