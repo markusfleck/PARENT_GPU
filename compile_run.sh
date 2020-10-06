@@ -41,7 +41,7 @@ g++ --std=c++11 -O3 src/process_output/get_values_from_PAR.cpp obj/io.o obj/util
 
 
 nvcc --std=c++11 -O3 -Xptxas -O3 -Xcompiler -O3,-fopenmp -gencode=arch=compute_61,code=\"sm_61,compute_61\" src/MIST_GPU/MIST_GPU.cu obj/io.o obj/util.o -o bin/MIST_GPU \
-&& export OMP_NUM_THREADS=4; bin/MIST_GPU -f ${OUT_NAME}.par -o ${OUT_NAME}_MIST_GPU.par \
+&& export OMP_NUM_THREADS=24; bin/MIST_GPU -f ${OUT_NAME}.par -o ${OUT_NAME}_MIST_GPU.par \
 && bin/get_values_from_PAR -p ${OUT_NAME}_MIST_GPU.par --short
 
 
