@@ -22,8 +22,17 @@
 //   We kindly ask you to include this citation in works that publish
 //   results generated using this program or any modifications of it.
 
+#ifndef UTIL_H
+#define UTIL_H
+
 #include "types.h"
 #include <string>
+
+struct Dof {
+    unsigned char type;
+    unsigned int id;
+
+};
 
 char *getCmdOption(char **begin, char **end, const std::string &option);
 bool cmdOptionExists(char **begin, char **end, const std::string &option);
@@ -31,3 +40,6 @@ unsigned char get_dof_type_from_id(unsigned int dof_id,
                                    unsigned int n_dihedrals);
 unsigned int get_min_id_for_type(unsigned char type, unsigned int n_dihedrals);
 unsigned int get_max_id_for_type(unsigned char type, unsigned int n_dihedrals);
+Dof get_dof_from_global_id(unsigned int id, unsigned int n_diherdals);
+
+#endif
