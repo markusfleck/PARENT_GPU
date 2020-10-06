@@ -133,6 +133,8 @@ int main(int argc, char *argv[]){
                     
                     max_value = 0.0;
                     max_index = 0;
+                    
+                    if(unprocessed.size() % 100 == 0)cout<<"Degrees of freedom processed: "<< (processed.size()-1)/double(n_dofs-1)*100<<"%"<<endl;
                 }
             }
         }

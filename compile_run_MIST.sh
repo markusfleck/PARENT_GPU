@@ -6,6 +6,10 @@ mkdir bin
 mkdir obj
 #~ mkdir output
 
+IN_NAME="complexes/1UGH/1UGH"
+OUT_NAME_BAT="complexes/output/1UGH"
+OUT_NAME="complexes/output/double_prec/1UGH"
+
 g++ -std=c++11 -c src/util/classes/Entropy_Matrix.cpp -o obj/Entropy_Matrix.o -Wall
 g++ -std=c++11 -c src/util/classes/Bat.cpp -o obj/Bat_File.o -Wall
 g++ -c src/util/io/io_binary.cpp -o obj/io_binary_tmp.o -Wall
@@ -24,20 +28,20 @@ ld -r obj/io_binary.o obj/io_text.o obj/Arg_Parser.o -o obj/io.o
 #~ g++ src/BAT_builder/bat.cpp obj/xdrfile.o  obj/xdrfile_xtc.o obj/io.o obj/topology.o obj/BAT_topology.o obj/BAT_trajectory.o  obj/util.o -o bin/BAT_builder -Wall
 g++ --std=c++11 -O3 src/process_output/get_values_from_PAR.cpp obj/io.o obj/util.o -o bin/get_values_from_PAR -Wall
 
-#bin/BAT_builder -t complexes/1UGH/1UGH.top -x complexes/1UGH/1UGH.xtc -o complexes/output/1UGH.bat -bb "CA C N H1 O1"
+#bin/BAT_builder -t ${IN_NAME}.top -x ${IN_NAME}.xtc -o ${OUT_NAME_BAT}.bat -bb "CA C N H1 O1"
 
 #~ nvcc --std=c++11 -O3 -Xptxas -O3 -gencode=arch=compute_61,code=\"sm_61,compute_61\" src/PARENT_GPU/PARENT_GPU.cu obj/io.o obj/util.o -o bin/PARENT_GPU \
-#~ && bin/PARENT_GPU -f devel/traj/UBM2_1.bat -o output/UBM2_1.par -b 50 \
-#~ && bin/get_values_from_PAR -p output/UBM2_1.par --short 
+#~ && bin/PARENT_GPU -f ${OUT_NAME_BAT}.bat -o ${OUT_NAME}.par -b 50 \
+#~ && bin/get_values_from_PAR -p ${OUT_NAME}.par --short 
 
 
-#~ nvcc --std=c++11 -O3 -Xptxas -O3 -Xcompiler -O3,-fopenmp -gencode=arch=compute_61,code=\"sm_61,compute_61\" src/MIST_GPU/MIST_GPU.cu obj/io.o obj/util.o -o bin/MIST_GPU \
-#~ && export OMP_NUM_THREADS=4; bin/MIST_GPU -f output/UBM2_1.par -o output/UBM2_1_MIST.par \
-#~ && bin/get_values_from_PAR -p output/UBM2_1_MIST.par --short
+nvcc --std=c++11 -O3 -Xptxas -O3 -Xcompiler -O3,-fopenmp -gencode=arch=compute_61,code=\"sm_61,compute_61\" src/MIST_GPU/MIST_GPU.cu obj/io.o obj/util.o -o bin/MIST_GPU \
+&& export OMP_NUM_THREADS=4; bin/MIST_GPU -f ${OUT_NAME}.par -o ${OUT_NAME}_MIST_GPU.par \
+&& bin/get_values_from_PAR -p ${OUT_NAME}_MIST_GPU.par --short
 
 
-g++ --std=c++11 -O3 -fopenmp src/MIST_GPU/MIST_openMP.cpp obj/io.o obj/util.o -o bin/MIST_openMP \
-&& export OMP_NUM_THREADS=4; bin/MIST_openMP -f output/UBM2_1.par -o output/UBM2_1_MIST_openMP.par \
-&& bin/get_values_from_PAR -p output/UBM2_1_MIST_openMP.par --short
+#~ g++ --std=c++11 -O3 -fopenmp src/MIST_GPU/MIST_openMP.cpp obj/io.o obj/util.o -o bin/MIST_openMP \
+#~ && export OMP_NUM_THREADS=4; bin/MIST_openMP -f ${OUT_NAME}.par -o ${OUT_NAME}_MIST_openMP.par \
+#~ && bin/get_values_from_PAR -p ${OUT_NAME}_MIST_openMP.par --short
 
 
