@@ -31,8 +31,13 @@ g++ --std=c++11 -O3 src/process_output/get_values_from_PAR.cpp obj/io.o obj/util
 #~ && bin/get_values_from_PAR -p output/UBM2_1.par --short 
 
 
-nvcc --std=c++11 -O3 -Xptxas -O3 -gencode=arch=compute_61,code=\"sm_61,compute_61\" src/MIST_GPU/MIST_GPU.cu obj/io.o obj/util.o -o bin/MIST_GPU \
-&& bin/MIST_GPU -f output/UBM2_1.par -o output/UBM2_1_MIST.par \
-&& bin/get_values_from_PAR -p output/UBM2_1_MIST.par --short
+#~ nvcc --std=c++11 -O3 -Xptxas -O3 -Xcompiler -O3,-fopenmp -gencode=arch=compute_61,code=\"sm_61,compute_61\" src/MIST_GPU/MIST_GPU.cu obj/io.o obj/util.o -o bin/MIST_GPU \
+#~ && export OMP_NUM_THREADS=4; bin/MIST_GPU -f output/UBM2_1.par -o output/UBM2_1_MIST.par \
+#~ && bin/get_values_from_PAR -p output/UBM2_1_MIST.par --short
+
+
+g++ --std=c++11 -O3 -fopenmp src/MIST_GPU/MIST_openMP.cpp obj/io.o obj/util.o -o bin/MIST_openMP \
+&& export OMP_NUM_THREADS=4; bin/MIST_openMP -f output/UBM2_1.par -o output/UBM2_1_MIST_openMP.par \
+&& bin/get_values_from_PAR -p output/UBM2_1_MIST_openMP.par --short
 
 

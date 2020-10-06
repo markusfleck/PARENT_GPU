@@ -1,0 +1,457 @@
+#define PRECISION double
+
+#include <iostream>
+#include <sys/time.h>
+
+#include "../util/io/io.h"
+#include "../util/types.h"
+#include "../util/classes/Entropy_Matrix.h"
+#include "../util/classes/My_Error.cpp"
+
+using namespace std;
+
+#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+inline void gpuAssert(cudaError_t return_code, const char *file, int line){
+    if (return_code != cudaSuccess){
+        fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(return_code), file, line);
+        exit(return_code);
+    }
+}
+
+unsigned int previous_power_2(unsigned int number){
+    number--; 
+    unsigned int value = 1;
+    while(number / value > 1){
+        value <<= 1;
+    }
+    return value;
+}
+
+//~ void set_dof_flags(bool* h_dof_flags, bool* d_dof_flags, unsigned int id, unsigned int n_elements){
+
+    //~ unsigned int n_dofs = 0.5 + sqrt( 0.25 + 2.0 * n_elements) + 0.5 ;
+
+    //~ unsigned int dof_idx1 = (unsigned int)((2.0 * n_dofs - 1.0) / 2.0 - sqrt((2.0 * n_dofs - 1.0) *  (2 * n_dofs - 1.0) / 4.0 - 2.0 * id));
+    //~ int dof_idx2 = id - dof_idx1 * (2 * n_dofs - dof_idx1 - 3)/2.0 + 1.5;
+    //~ //printf("id: %d dofs: %d %d n_dofs: %d\n", id, dof_idx1, dof_idx2, n_dofs);
+    //~ if(dof_idx2 <= dof_idx1){
+        //~ dof_idx1--;
+        //~ dof_idx2 = id - dof_idx1 * (2 * n_dofs - dof_idx1 - 3)/2.0 + 1.5;
+    //~ }
+    //~ if(dof_idx2 >= n_dofs){
+        //~ dof_idx1++;
+        //~ dof_idx2 = id - dof_idx1 * (2 * n_dofs - dof_idx1 - 3)/2.0 + 1.5;
+    //~ }
+    //printf("id: %d dofs: %d %d flagged: %d %d n_dofs: %d\n", id, dof_idx1, dof_idx2, int(dof_flags[dof_idx1]), int(dof_flags[dof_idx2]), n_dofs);
+    //printf("flagged: %d %d %d\n", int(dof_flags[dof_idx1]), int(dof_flags[dof_idx2]), int(dof_flags[dof_idx1]) + int(dof_flags[dof_idx2]));
+    //~ //assert dof_flags[dof_idx1] != dof_flags[dof_idx2];
+    
+    //~ if(!h_dof_flags[dof_idx1]){
+        //~ h_dof_flags[dof_idx1] = true;
+        //~ cudaMemset(d_dof_flags + dof_idx1, true, 1);
+    //~ }
+    //~ if(!h_dof_flags[dof_idx2]){
+        //~ h_dof_flags[dof_idx2] = true;
+        //~ cudaMemset(d_dof_flags + dof_idx2, true, 1);
+    //~ }
+//~ }
+
+void get_type_ids_from_mutual_id(unsigned int* type_ids, unsigned int id, unsigned int n_elements){
+
+    unsigned int n_dofs = 0.5 + sqrt( 0.25 + 2.0 * n_elements) + 0.5 ;
+
+    type_ids[0] = (unsigned int)((2.0 * n_dofs - 1.0) / 2.0 - sqrt((2.0 * n_dofs - 1.0) *  (2 * n_dofs - 1.0) / 4.0 - 2.0 * id));
+    type_ids[1] = id - type_ids[0] * (2 * n_dofs - type_ids[0] - 3)/2.0 + 1.5;
+    //printf("id: %d dofs: %d %d n_dofs: %d\n", id, type_ids[0], type_ids[1], n_dofs);
+    if(type_ids[1] <= type_ids[0]){
+        type_ids[0]--;
+        type_ids[1] = id - type_ids[0] * (2 * n_dofs - type_ids[0] - 3)/2.0 + 1.5;
+    }
+    if(type_ids[1] >= n_dofs){
+        type_ids[0]++;
+        type_ids[1] = id - type_ids[0] * (2 * n_dofs - type_ids[0] - 3)/2.0 + 1.5;
+    }
+    //printf("id: %d dofs: %d %d n_dofs: %d\n", id, type_ids[0], type_ids[1], n_dofs);
+    //assert dof_flags[type_ids[0]] != dof_flags[type_ids[1]];
+    
+}
+
+__device__ __forceinline__ bool mutual_is_valid(bool* dof_flags, unsigned int id, unsigned int n_elements){
+
+    unsigned int n_dofs = 0.5 + sqrt( 0.25 + 2.0 * n_elements) + 0.5 ; // TODO: optimize here, also fastmath sqrt
+
+    unsigned int dof_idx1 = (unsigned int)((2.0 * n_dofs - 1.0) / 2.0 - sqrt((2.0 * n_dofs - 1.0) *  (2 * n_dofs - 1.0) / 4.0 - 2.0 * id)); // TODO: check fastmath sqrt
+    int dof_idx2 = id - dof_idx1 * (2 * n_dofs - dof_idx1 - 3)/2.0 + 1.5;
+    //printf("id: %d dofs: %d %d n_dofs: %d\n", id, dof_idx1, dof_idx2, n_dofs);
+    if(dof_idx2 <= dof_idx1){
+        dof_idx1--;
+        dof_idx2 = id - dof_idx1 * (2 * n_dofs - dof_idx1 - 3)/2.0 + 1.5;
+    }
+    if(dof_idx2 >= n_dofs){
+        dof_idx1++;
+        dof_idx2 = id - dof_idx1 * (2 * n_dofs - dof_idx1 - 3)/2.0 + 1.5;
+    }
+    //printf("id: %d dofs: %d %d n_dofs: %d\n", id, dof_idx1, dof_idx2, n_dofs);
+    return dof_flags[dof_idx1] != dof_flags[dof_idx2];
+}
+
+__device__ __forceinline__ void set_dof_flags(bool* dof_flags, unsigned int id, unsigned int n_elements){
+
+    unsigned int n_dofs = 0.5 + sqrt( 0.25 + 2.0 * n_elements) + 0.5 ;
+
+    unsigned int dof_idx1 = (unsigned int)((2.0 * n_dofs - 1.0) / 2.0 - sqrt((2.0 * n_dofs - 1.0) *  (2 * n_dofs - 1.0) / 4.0 - 2.0 * id));
+    int dof_idx2 = id - dof_idx1 * (2 * n_dofs - dof_idx1 - 3)/2.0 + 1.5;
+    //printf("id: %d dofs: %d %d n_dofs: %d\n", id, dof_idx1, dof_idx2, n_dofs);
+    if(dof_idx2 <= dof_idx1){
+        dof_idx1--;
+        dof_idx2 = id - dof_idx1 * (2 * n_dofs - dof_idx1 - 3)/2.0 + 1.5;
+    }
+    if(dof_idx2 >= n_dofs){
+        dof_idx1++;
+        dof_idx2 = id - dof_idx1 * (2 * n_dofs - dof_idx1 - 3)/2.0 + 1.5;
+    }
+    //~ printf("id: %d dofs: %d %d flagged: %d %d n_dofs: %d\n", id, dof_idx1, dof_idx2, int(dof_flags[dof_idx1]), int(dof_flags[dof_idx2]), n_dofs);
+    //~ printf("flagged: %d %d %d\n", int(dof_flags[dof_idx1]), int(dof_flags[dof_idx2]), int(dof_flags[dof_idx1]) + int(dof_flags[dof_idx2]));
+    //assert dof_flags[dof_idx1] != dof_flags[dof_idx2];
+    
+    //~ printf("SET START\n");
+    if(!dof_flags[dof_idx1]){
+        dof_flags[dof_idx1] = true;
+        //~ printf("SET %d\n", dof_idx1);
+    }
+    if(!dof_flags[dof_idx2]){
+        dof_flags[dof_idx2] = true;
+        //~ printf("SET %d\n", dof_idx2);
+    }
+    //~ printf("SET END\n");
+}
+
+//~ __global__ void mask_mutual(PRECISION* g_input_mutual, PRECISION* g_output_mutual, bool* dof_flags, unsigned int* d_indices_original, unsigned int* d_in_index, unsigned int n_elements){
+__global__ void mask_mutual(PRECISION* g_input_mutual, PRECISION* g_output_mutual, bool* dof_flags, unsigned int n_elements){
+    unsigned int idx_g = blockIdx.x*blockDim.x + threadIdx.x;
+
+    if(idx_g < n_elements){
+        //~ PRECISION val_before = g_input_mutual[idx_g];
+        //~ d_in_index[idx_g] = d_indices_original[idx_g];
+        g_output_mutual[idx_g] = mutual_is_valid(dof_flags, idx_g, n_elements) ? g_input_mutual[idx_g] : 0.0;
+        //~ if(mutual_is_valid(dof_flags, idx_g, n_elements))printf("valid: %d value: %f value_before: %f\n",idx_g, g_output_mutual[idx_g], val_before);
+    
+    }
+}
+
+__global__ void reduce_mist(PRECISION* g_input_mutual, PRECISION* g_output_mutual, unsigned int* g_input_index, unsigned int* g_output_index, unsigned int n_elements, bool* dof_flags, unsigned int* result_index, PRECISION* result_mutual)
+{
+    extern __shared__ PRECISION shared_mem[];
+    PRECISION* shared_mem_mutual = shared_mem;
+    unsigned int* shared_mem_index = (unsigned int* )&shared_mem_mutual[blockDim.x/warpSize + 1];
+
+    unsigned int tid = threadIdx.x;
+    unsigned int n_threads_total = blockDim.x*gridDim.x;
+    unsigned int warp_mask = (0xffffffff);
+
+    unsigned int idx_g = blockIdx.x*blockDim.x + threadIdx.x;
+    //~ unsigned int idx_g_t = blockIdx.x*blockDim.x + threadIdx.x; //-----------------------
+    PRECISION max_mut_thread = g_input_mutual[idx_g];
+    unsigned int max_index_thread = g_input_index[idx_g];
+    idx_g += n_threads_total;
+
+    while(idx_g < n_elements){
+        if(g_input_mutual[idx_g] > max_mut_thread){
+            max_mut_thread = g_input_mutual[idx_g];
+            max_index_thread = g_input_index[idx_g];
+        }
+        idx_g += n_threads_total;
+    }
+    
+    for (int delta = warpSize/2; delta > 0; delta /= 2)
+    {
+        PRECISION compare_mut = __shfl_down_sync(warp_mask, max_mut_thread, delta);
+        unsigned int compare_index = __shfl_down_sync(warp_mask, max_index_thread, delta);
+        if(compare_mut > max_mut_thread) {
+            max_mut_thread = compare_mut;
+            max_index_thread = compare_index;
+        }
+    }
+    
+    if((tid % warpSize) == 0)
+    {
+        shared_mem_mutual[tid/warpSize] = max_mut_thread;
+        shared_mem_index[tid/warpSize] = max_index_thread;
+    }
+    __syncthreads();
+    
+    unsigned int n_to_process = (blockDim.x/warpSize) > 0 ? (blockDim.x/warpSize) : 1;
+    if (tid < n_to_process){
+        max_mut_thread = shared_mem_mutual[tid];
+        max_index_thread = shared_mem_index[tid];
+        for (int delta = warpSize/2; delta > 0; delta /= 2){
+            PRECISION compare_mut = __shfl_down_sync(warp_mask, max_mut_thread, delta);
+            unsigned int compare_index = __shfl_down_sync(warp_mask, max_index_thread, delta);
+            if (compare_mut > max_mut_thread) {
+                max_mut_thread = compare_mut;
+                max_index_thread = compare_index;
+            }
+        }
+    }
+    if (tid == 0){
+        if(gridDim.x > 1) {
+            g_output_mutual[blockIdx.x] = max_mut_thread;
+            g_output_index[blockIdx.x] = max_index_thread;
+        }
+        else{
+            set_dof_flags(dof_flags, max_index_thread, n_elements);
+            *result_mutual = max_mut_thread;
+            *result_index = max_index_thread;
+        }
+    }
+    //~ if(idx_g_t == 0){
+        //~ printf("max_index_thread: %d max_mutual_thread: %f\n", max_index_thread, max_mut_thread);
+    //~ }
+}
+
+
+int main(int argc, char *argv[]){
+    // start the stopwatch for the execution time
+    timeval tv_start, tv_start_calc, tv_end, tv_end_calc;
+    gettimeofday(&tv_start, NULL);
+    int deviceCount;
+    gpuErrchk( cudaGetDeviceCount(&deviceCount) );
+    
+    unsigned int device = 0; // TODO: implement choices for graphics card
+    cout << "Found " << deviceCount << " CUDA device(s). Chose CUDA device number " << device << "." << endl;
+    struct cudaDeviceProp prop;
+    gpuErrchk( cudaGetDeviceProperties(&prop, device) );
+    cout << "Device name: " << prop.name << endl;
+    cout << "CUDA capability: " << prop.major << "." << prop.minor << endl;
+    cout << "Global memory: " << prop.totalGlobalMem / 1024 / 1024 << " MiB" << endl;
+    cout << "Shared memory per block: " << prop.sharedMemPerBlock / 1024 << " kiB" << endl;
+    cout << "Maximum threads per block dimension: " << prop.maxThreadsDim[0] << " " << prop.maxThreadsDim[1] << " " << prop.maxThreadsDim[2] << endl;
+    cout << "Maximum blocks per grid dimension: " << prop.maxGridSize[0] << " " << prop.maxGridSize[1] << " " << prop.maxGridSize[2] << endl;
+    cout << "Warp size: " << prop.warpSize << endl << endl;
+
+
+    if (argc != 5) {
+        cerr << "USAGE: " << argv[0] << " -f input.par -o output.par\n";
+        exit(EXIT_FAILURE);
+    }
+
+    Arg_Parser arg_parser(argc, argv);
+    if (!arg_parser.cmd_option_exists("-f") ||
+        !arg_parser.cmd_option_exists("-o")) {
+        // check for correct command line options
+        cerr << "USAGE: " << argv[0] << " -f input.par -o output.par\n";
+        exit(EXIT_FAILURE);
+    }
+
+    if (strcmp(arg_parser.get_extension(arg_parser.get_cmd_option("-f")),
+             "par") ||
+      strcmp(arg_parser.get_extension(arg_parser.get_cmd_option("-o")),
+             "par")) {
+    // check for the extensions of the input and output file
+    cerr << "USAGE: " << argv[0] << " -f input.par -o output.par\n";
+    exit(EXIT_FAILURE);
+    }
+
+    try {
+        Entropy_Matrix ent_mat(arg_parser.get_cmd_option("-f"));
+        unsigned int n_bonds = ent_mat.getNBonds();
+        unsigned int n_angles = ent_mat.getNAngles();
+        unsigned int n_dihedrals = ent_mat.getNDihedrals();
+        unsigned int n_type[3] = {n_bonds, n_angles, n_dihedrals};
+        unsigned int n_atoms = n_dihedrals + 3;
+        unsigned int n_dofs = 3 * n_atoms - 6;
+        unsigned int n_mut = n_dofs * (n_dofs - 1) / 2;
+    
+        PRECISION* h_mut_mat = new PRECISION[n_mut];
+        unsigned int* h_index = new unsigned int[n_mut];
+    
+        unsigned int counter = 0 ;
+        for (unsigned char type1 = 0; type1 < 3; type1++){
+            for(unsigned int idx1 = 0; idx1 < n_type[type1]; idx1++){
+                for (unsigned char type2 = type1; type2 < 3; type2++){
+                    unsigned int start_idx2 = (type1 == type2) ? idx1 + 1 : 0;     
+                    for(unsigned int idx2 = start_idx2; idx2 < n_type[type2]; idx2++){
+                        //~ cout<<int(type1)<<" "<<int(type2)<<" "<<idx1<<" "<<idx2<<" "<<ent_mat.getMutual(type1, type2, idx1, idx2)<<endl;
+                        h_mut_mat[counter] = ent_mat.getMutual(type1, type2, idx1 + 1, idx2 + 1);
+                        h_index[counter] = counter;
+                        counter++;
+                    }
+                }
+            }
+        }
+    
+        bool* h_dof_flags = new bool[n_dofs];
+        for (unsigned int i = 0; i < n_dofs; i++){
+            h_dof_flags[i] = false;
+        }
+        h_dof_flags[0] = true;
+        //~ set_dof_flags(h_dof_flags, 0, n_mut);
+        unsigned int n_to_process = n_dofs - 1;
+
+        //~ unsigned int n_mut = n_dofs * (n_dofs - 1) / 2;
+        //~ PRECISION* h_mut_mat = new PRECISION[n_mut];
+        //~ unsigned int* h_index = new unsigned int[n_mut];
+        //~ for (unsigned int i = 0; i < n_mut; i++){
+            //~ h_mut_mat[i] = i+1;
+            //~ h_index[i] = i;
+        //~ }
+        //~ h_mut_mat[1234] = 1123456789;
+        
+        PRECISION *d_in_mat_original, *d_in_mat, *d_out_mat, *d_result_mutual;
+        unsigned int *d_in_index, *d_out_index, *d_result_indices, *d_indices_original;
+        bool *d_dof_flags;
+        unsigned int n_threads = (n_mut < prop.maxThreadsDim[0]*2) ? previous_power_2(n_mut) : prop.maxThreadsDim[0];
+        unsigned int n_blocks = (n_mut + (n_threads * 2 - 1)) / (n_threads * 2);
+        
+        
+        gpuErrchk( cudaMalloc((void **)&d_in_mat_original, n_mut * sizeof(PRECISION)) );
+        gpuErrchk( cudaMalloc((void **)&d_indices_original, n_mut * sizeof(unsigned int)) );
+        gpuErrchk( cudaMalloc((void **)&d_dof_flags, n_dofs * sizeof(bool)) );
+        gpuErrchk( cudaMalloc((void **)&d_in_mat, n_mut * sizeof(PRECISION)) );
+        gpuErrchk( cudaMalloc((void **)&d_out_mat, n_blocks * sizeof(PRECISION)) );
+        gpuErrchk( cudaMalloc((void **)&d_in_index, n_mut * sizeof(unsigned int)) );
+        gpuErrchk( cudaMalloc((void **)&d_out_index, n_blocks * sizeof(unsigned int)) );
+        gpuErrchk( cudaMalloc((void **)&d_result_indices, (n_dofs - 1) * sizeof(unsigned int)) );
+        gpuErrchk( cudaMalloc((void **)&d_result_mutual, (n_dofs - 1) * sizeof(PRECISION)) );
+        gpuErrchk( cudaMemcpy(d_in_mat_original, h_mut_mat, n_mut * sizeof(PRECISION), cudaMemcpyHostToDevice) );
+        gpuErrchk( cudaMemcpy(d_indices_original, h_index, n_mut * sizeof(unsigned int), cudaMemcpyHostToDevice) );
+        gpuErrchk( cudaMemcpy(d_dof_flags, h_dof_flags, n_dofs * sizeof(bool), cudaMemcpyHostToDevice) );
+        
+        
+        gettimeofday(&tv_start_calc, NULL);
+        
+        unsigned int* h_result_indices = new unsigned int[n_dofs - 1];
+        PRECISION* h_result_mutual = new PRECISION[n_dofs - 1];
+        while(n_to_process > 0){
+        
+            int n_flagged = 0;
+            for(int i = 0; i<n_dofs; i++){
+                if(h_dof_flags[i])n_flagged++;
+            }
+            //~ cout<<"n_to_process: "<<n_to_process<<" n_flagged: "<<n_flagged<<" both: "<<n_to_process + n_flagged<<" n_dofs: "<<n_dofs<<endl;
+            
+            
+            
+            gpuErrchk( cudaMemcpy(d_in_index, d_indices_original, n_mut * sizeof(unsigned int), cudaMemcpyDeviceToDevice) );
+        
+            unsigned int n_threads_mask = prop.warpSize;//prop.maxThreadsDim[0]/4;//prop.warpSize; //TODO: find optimal n_threads_mask 
+            unsigned int n_blocks_mask = (n_mut % n_threads == 0) ? n_mut : n_mut + 1;
+            //~ mask_mutual<<<n_blocks_mask, n_threads_mask>>>(d_in_mat_original, d_in_mat, d_dof_flags, d_indices_original, d_in_index, n_mut);
+            mask_mutual<<<n_blocks_mask, n_threads_mask>>>(d_in_mat_original, d_in_mat, d_dof_flags, n_mut);
+            gpuErrchk( cudaPeekAtLastError() );
+            gpuErrchk( cudaDeviceSynchronize() );
+            //~ cout<<"MASK DONE"<<endl;
+            
+            unsigned int n_mut_tmp = n_mut;
+            PRECISION *d_tmp_mat = d_in_mat;
+            d_in_mat = d_out_mat;
+            d_out_mat = d_tmp_mat;
+            unsigned int *d_tmp_index = d_in_index;
+            d_in_index = d_out_index;
+            d_out_index = d_tmp_index;
+            
+            
+            while(n_mut_tmp > 1){
+                //~ cout<<"inner while"<<endl;
+                d_tmp_mat = d_in_mat;
+                d_in_mat = d_out_mat;
+                d_out_mat = d_tmp_mat;
+                d_tmp_index = d_in_index;
+                d_in_index = d_out_index;
+                d_out_index = d_tmp_index;
+                
+                unsigned int bytes_shared_mem =  ( (n_threads/prop.warpSize) + 1 ) * ( sizeof(PRECISION) + sizeof(unsigned int) );
+                reduce_mist<<< n_blocks, n_threads, bytes_shared_mem >>>(d_in_mat, d_out_mat, d_in_index, d_out_index, n_mut_tmp, d_dof_flags, 
+                                                                            d_result_indices + n_dofs - 1 - n_to_process, d_result_mutual + n_dofs - 1 - n_to_process); //TODO: find optimal n_threads
+                gpuErrchk( cudaPeekAtLastError() );
+                gpuErrchk( cudaDeviceSynchronize() );
+            
+                n_mut_tmp = n_blocks;
+                n_threads = (n_mut_tmp < prop.maxThreadsDim[0] * 2) ? previous_power_2( (n_mut_tmp + 1) / 2) : prop.maxThreadsDim[0];
+                n_blocks = (n_mut_tmp + (n_threads * 2 - 1) ) / (n_threads * 2);
+            }
+            
+            //~ cout<<"Result index to set: "<<n_dofs - n_to_process - 1<<" index: "<<h_result_indices[n_dofs - n_to_process - 1]<<" value: "<<h_result_mutual[n_dofs - n_to_process - 1]<<endl<<endl;
+            //~ cout<<"Result index: "<<h_result_indices[n_dofs - n_to_process - 1]<<" "<<n_dofs - n_to_process - 1<<"/"<<n_dofs - 2<<endl;
+            //~ set_dof_flags(h_dof_flags, d_dof_flags, h_result_indices[n_dofs - n_to_process - 1], n_mut);
+            n_to_process--;
+        }
+        
+        //~ gpuErrchk( cudaMemcpy(h_result_indices + n_dofs - n_to_process - 1, d_out_index, sizeof(unsigned int), cudaMemcpyDeviceToHost) );//TODO: keep result_indices on GPU until end of calculation
+        //~ gpuErrchk( cudaMemcpy(h_result_mutual + n_dofs - n_to_process - 1, d_out_mat, sizeof(PRECISION), cudaMemcpyDeviceToHost) );//TODO: keep result_indices on GPU until end of calculation
+        
+        gpuErrchk( cudaMemcpy(h_result_indices, d_result_indices, (n_dofs - 1) * sizeof(unsigned int), cudaMemcpyDeviceToHost) );//TODO: keep result_indices on GPU until end of calculation
+        gpuErrchk( cudaMemcpy(h_result_mutual, d_result_mutual, (n_dofs - 1) * sizeof(PRECISION), cudaMemcpyDeviceToHost) );//TODO: keep result_indices on GPU until end of calculation
+        
+        //gpuErrchk( cudaMemcpy(h_mut_mat, d_out_mat, sizeof(PRECISION), cudaMemcpyDeviceToHost) );
+        
+        //~ for(int i = 0; i<n_dofs; i++){
+                //~ if(!h_dof_flags[i])cout<<"unflagged: "<<i<<endl;;
+            //~ }
+        
+        
+        gettimeofday(&tv_end_calc, NULL);
+        //cout << "Result: " <<h_index[0]<<" "<<int(h_mut_mat[0]) << endl;
+        
+        for (unsigned char type1 = 0; type1 < 3; type1++){
+            for(unsigned int idx1 = 0; idx1 < n_type[type1]; idx1++){
+                for (unsigned char type2 = type1; type2 < 3; type2++){
+                    unsigned int start_idx2 = (type1 == type2) ? idx1 + 1 : 0;     
+                    for(unsigned int idx2 = start_idx2; idx2 < n_type[type2]; idx2++){
+                        ent_mat.setMutual(type1, type2, idx1 + 1, idx2 + 1, 0.0);
+                    }
+                }
+            }
+        }
+        
+        unsigned int type_ids[2];
+        for(unsigned int i = 0; i < n_dofs - 1; i++){
+            get_type_ids_from_mutual_id(type_ids, h_result_indices[i], n_mut);
+            int type1 = get_dof_type_from_id(type_ids[0], n_dihedrals);
+            int type2 = get_dof_type_from_id(type_ids[1], n_dihedrals);
+            type_ids[0] -= get_min_id_for_type(type1, n_dihedrals);
+            type_ids[1] -= get_min_id_for_type(type2, n_dihedrals);
+            //~ cout<<"Indices: "<<type_ids[0]<<" "<<type_ids[1]<<" "<<type1<<" "<<type2<<" "<<result_mutual[i]<<endl;
+            //~ cout<<type1<<" "<<type2<<" "<<type_ids[0]<<" "<<type_ids[1]<<" "<<n_dofs - 2 - i <<" "<<result_mutual[i]<<endl;
+            ent_mat.setMutual(type1, type2, type_ids[0] + 1, type_ids[1] + 1, h_result_mutual[i]);
+            
+        }
+        
+        //~ get_type_ids_from_mutual_id(unsigned int* type_ids, unsigned int id, unsigned int n_elements)
+        //~ ent_mat.setMutual(1, 2, 12, 10, 123.456);
+        
+        ent_mat.write(arg_parser.get_cmd_option("-o"));
+        
+        gettimeofday(&tv_end, NULL);
+        cout << endl << endl;
+        cout << "Calculation time: "<< tv_end_calc.tv_sec + 1e-6 * tv_end_calc.tv_usec - tv_start_calc.tv_sec - 1e-6 * tv_start_calc.tv_usec << endl;
+        cout << "Total execution time: " << tv_end.tv_sec + 1e-6 * tv_end.tv_usec - tv_start.tv_sec - 1e-6 * tv_start.tv_usec << endl;
+        cout << "PROGRAM FINISHED SUCCESSFULLY." << endl << endl << endl;
+        
+        cudaDeviceReset();
+        
+    } catch (My_Error my_error) {
+        cerr << my_error.what() << endl;
+        cerr << "USAGE:\n" << argv[0] << " -p input.par [--short]" << endl;
+        return 1;
+    } catch (...) {
+        cerr << "AN UNIDENTIFIED ERROR HAS OCCURRED! ABORTING.\n" << endl;
+        cerr << "USAGE:\n" << argv[0] << " -p input.par [--short]" << endl;
+        return 1;
+    }
+    
+    //~ unsigned int N = 1000;
+    //~ unsigned int id = 1996;
+    //~ unsigned int n1 = int((2 * N - 1) / 2.0 - sqrt((2 * N - 1) *  (2 * N - 1) / 4.0 - 2 * id));
+    //~ int n2 = id - n1 * (2 * N - n1 - 3)/2.0 + 1.5;
+    //~ if(n2<=n1){
+        //~ n1--;
+        //~ n2 = id - n1 * (2 * N - n1 - 3)/2.0 + 1.5;
+    //~ }
+    //~ if(n2>=N){
+        //~ n1++;
+        //~ n2 = id - n1 * (2 * N - n1 - 3)/2.0 + 1.5;
+    //~ }
+    //~ cout<<n1<<" "<<n2<<endl;
+    return 0;
+}
