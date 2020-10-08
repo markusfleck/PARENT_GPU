@@ -4,7 +4,10 @@
 #define MEMORY_USAGE 0.8 // GPU
 #define RAM_USAGE 0.8    // CPU
 #define DEBUG false
-#define N_STREAMS 16
+#define N_STREAMS 32
+#define HISTOGRAM_THREAD_WORK_MULTIPLE 16
+#define HISTOGRAM_THREADS 512
+#define USE_SHARED_MEM_HISTOGRAMS
 
 #include <cmath>
 #include <cstddef>
@@ -605,6 +608,7 @@ public:
   Entropy_Matrix *ent_mat;
   unsigned int n_dihedrals;
   Bat *bat;
+    cudaStream_t streams[N_STREAMS];
 
   PARENT_GPU(size_t cpu_n_bytes,
              size_t gpu_n_bytes, char const *bat_str,
@@ -625,6 +629,11 @@ public:
   void calculate_entropy() {
     unsigned int skip = 0;
     unsigned int skip_next = 0;
+  
+    for (unsigned int i = 0; i < N_STREAMS; i++) {
+        cudaStreamCreate(streams + i);
+    }
+    gpuErrchk(cudaPeekAtLastError());
 
     for (unsigned int i = 0; i < ram->blocks.size() - 1; i++) { //using this more complicated scheme, every but the first hard-dsik read is converted into a pair calculation
         skip = skip_next;
@@ -675,6 +684,11 @@ public:
     }
     cout<<"Calculating Block "<<ram->blocks.size()<<"."<<endl;
     calculate_block_cpu(&(ram->blocks[ram->blocks.size() - 1]));
+    
+    for (unsigned int i = 0; i < N_STREAMS; i++) {
+        cudaStreamDestroy(streams[i]);
+    }
+    gpuErrchk(cudaPeekAtLastError());
   }
 
   void calculate_block_pair_cpu(CPU_RAM_Block *block1, CPU_RAM_Block *block2) {
@@ -739,11 +753,6 @@ public:
                    // ram->gpu_ram_layout->dofs_per_block)
     gpuErrchk(cudaMemset(ram->gpu_ram_layout->result, 0, bytes_to_zero));
 
-
-    cudaStream_t streams[N_STREAMS];
-    for (unsigned int i = 0; i < N_STREAMS; i++) {
-        cudaStreamCreate(streams + i);
-    }
     
     for (unsigned int i = 0; i < block1->n_dofs; i++) {
       for (unsigned int j = 0; j < block2->n_dofs; j++) {
@@ -759,13 +768,21 @@ public:
             (ram->cpu_ram_layout->maxima[dof2_g] - min2) / n_bins;
         unsigned int *histogram = ram->gpu_ram_layout->histograms +
                                   (i * block2->n_dofs + j) * n_bins * n_bins;
-        int blocks = n_frames / threads_per_block;
+        
+        int threads_per_block_sav = threads_per_block;
+        threads_per_block = HISTOGRAM_THREADS;
+        int blocks = n_frames / threads_per_block / HISTOGRAM_THREAD_WORK_MULTIPLE;
         if (n_frames % threads_per_block > 0)
           blocks++;
+        #ifdef USE_SHARED_MEM_HISTOGRAMS
+        histo2D_shared_block<<<blocks, threads_per_block, n_bins * n_bins * sizeof(unsigned int), streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(
+        #else
         histo2D<<<blocks, threads_per_block, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(
+        #endif
             block1->gpu_ram_start + i * n_frames,
             block2->gpu_ram_start + j * n_frames, n_frames, histogram, n_bins,
             bin_size1, bin_size2, min1, min2);
+        threads_per_block = threads_per_block_sav;
       }
     }
     //gpuErrchk(cudaPeekAtLastError());
@@ -834,10 +851,7 @@ public:
     }
     gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaDeviceSynchronize());
-    for (unsigned int i = 0; i < N_STREAMS; i++) {
-        cudaStreamDestroy(streams[i]);
-    }
-    gpuErrchk(cudaPeekAtLastError());
+    
     gpuErrchk(cudaMemcpy(ram->cpu_ram_layout->tmp_result_entropy,
                          ram->gpu_ram_layout->result,
                          block1->n_dofs * block2->n_dofs * sizeof(PRECISION),
@@ -877,10 +891,6 @@ public:
                    // ram->gpu_ram_layout->dofs_per_block)
     gpuErrchk(cudaMemset(ram->gpu_ram_layout->result, 0, bytes_to_zero));
   
-    cudaStream_t streams[N_STREAMS];
-    for (unsigned int i = 0; i < N_STREAMS; i++) {
-        cudaStreamCreate(streams + i);
-    }
 
     for (unsigned int i = 0; i < block->n_dofs - 1; i++) {
       for (unsigned int j = i + 1; j < block->n_dofs; j++) {
@@ -895,13 +905,21 @@ public:
             (ram->cpu_ram_layout->maxima[dof2_g] - min2) / n_bins;
         unsigned int *histogram = ram->gpu_ram_layout->histograms +
                                   (i * block->n_dofs + j) * n_bins * n_bins;
-        int blocks = n_frames / threads_per_block;
+      
+        int threads_per_block_sav = threads_per_block;
+        threads_per_block = HISTOGRAM_THREADS;
+        int blocks = n_frames / threads_per_block / HISTOGRAM_THREAD_WORK_MULTIPLE;
         if (n_frames % threads_per_block > 0)
           blocks++;
+        #ifdef USE_SHARED_MEM_HISTOGRAMS
+        histo2D_shared_block<<<blocks, threads_per_block, n_bins * n_bins * sizeof(unsigned int), streams[(i * block->n_dofs + j) % N_STREAMS]>>>(
+        #else
         histo2D<<<blocks, threads_per_block, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(
+        #endif
             block->gpu_ram_start + i * n_frames,
             block->gpu_ram_start + j * n_frames, n_frames, histogram, n_bins,
             bin_size1, bin_size2, min1, min2);
+        threads_per_block = threads_per_block_sav;
       }
     }
     //gpuErrchk(cudaPeekAtLastError());
@@ -967,11 +985,7 @@ public:
         }
       }
     }
-    gpuErrchk(cudaPeekAtLastError());
-    gpuErrchk(cudaDeviceSynchronize());
-    for (unsigned int i = 0; i < N_STREAMS; i++) {
-        cudaStreamDestroy(streams[i]);
-    }
+
     gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaMemcpy(ram->cpu_ram_layout->tmp_result_entropy,
                          ram->gpu_ram_layout->result,

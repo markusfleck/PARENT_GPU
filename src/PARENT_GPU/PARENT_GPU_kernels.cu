@@ -154,37 +154,63 @@ cu_dihedralEnt(PRECISION *d_dihedralsEntropy1DMaster, PRECISION *d_minDihedrals,
                     (2.0 * numFrames); // and apply Herzel entropy unbiasing
 }
 
-__global__ void histo2D(PRECISION *traj1, PRECISION *traj2, const int numFrames,
-                        unsigned int *histo, const int bins2,
+__global__ void histo2D(PRECISION* __restrict__ traj1, PRECISION* __restrict__ traj2, const int numFrames,
+                        unsigned int* __restrict__ histo, const int n_bins,
                         PRECISION binSize1, PRECISION binSize2, PRECISION min1,
                         PRECISION min2) {
 
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
   int offset = blockDim.x * gridDim.x;
-  //~ if(idx==0)printf("%d %p\n",idx,histo);
+    
   while (idx < numFrames) {
-    if (int((traj1[idx] - min1) / binSize1) < 0)
-      printf("H1 %d %d %f %f %f %d\n", idx, int((traj1[idx] - min1) / binSize1),
-             traj1[idx], min1, binSize1, numFrames);
-    if (int((traj2[idx] - min2) / binSize2) < 0)
-      printf("H2 %d %d %f %f %f %d\n", idx, int((traj2[idx] - min2) / binSize2),
-             traj2[idx], min2, binSize2, numFrames);
-    if (int((traj1[idx] - min1) / binSize1) > 49)
-      printf("H3 %d %d %f %f %f %d\n", idx, int((traj1[idx] - min1) / binSize1),
-             traj1[idx], min1, binSize1, numFrames);
-    if (int((traj2[idx] - min2) / binSize2) > 49)
-      printf("H4 %d %d %f %f %f %d\n", idx, int((traj2[idx] - min2) / binSize2),
-             traj2[idx], min2, binSize2, numFrames);
-    //~ atomicAdd(&histo[int((traj1[idx]-min1)/binSize1) * bins2 +
-    //int((traj2[idx]-min2)/binSize2)], 1); ~
-    //printf("%d\n",int((traj1[idx]-min1)/binSize1) * bins2 +
-    //int((traj2[idx]-min2)/binSize2),int((traj1[idx]-min1)/binSize1) *
-    //bins2,int((traj2[idx]-min2)/binSize2));
-    atomicAdd(&histo[int((traj1[idx] - min1) / binSize1) * bins2 +
+    atomicAdd(&histo[int((traj1[idx] - min1) / binSize1) * n_bins +
                      int((traj2[idx] - min2) / binSize2)],
               1);
     idx += offset;
   }
+}
+
+__global__ void histo2D_shared_block(PRECISION* __restrict__ traj1, PRECISION* __restrict__ traj2, const int numFrames,
+                        unsigned int* __restrict__ histo, const int n_bins,
+                        PRECISION binSize1, PRECISION binSize2, PRECISION min1,
+                        PRECISION min2) {
+                        
+    extern __shared__ unsigned int histo_block[];
+
+  int idx = threadIdx.x + blockIdx.x * blockDim.x;
+  int offset = blockDim.x * gridDim.x;
+    int tid = threadIdx.x;
+    int n_bins_total = n_bins * n_bins;
+                        
+    while(tid < n_bins_total){
+        //~ printf("tid: %d n_bins_total: %d histo_block %d\n", tid, n_bins_total, histo_block[tid]);
+        histo_block[tid] = 0;
+        tid += blockDim.x;
+    }
+    
+  while (idx < numFrames) {
+    atomicAdd(&histo[int((traj1[idx] - min1) / binSize1) * n_bins +
+                     int((traj2[idx] - min2) / binSize2)],
+              1);
+    idx += offset;
+  }
+  
+  
+  __syncthreads();
+  
+  //~ unsigned int tmp = 0;
+  //~ for(unsigned int i = 0; i < n_bins_total; i++){
+    //~ tmp += histo_block[i];
+  //~ }
+  //~ printf("n_histo: %d\n", tmp);
+  
+  tid = threadIdx.x;
+  while(tid < n_bins_total){
+    //~ printf("tid: %d n_bins_total: %d histo_block %d\n", tid, n_bins_total, histo_block[tid]);
+    atomicAdd(&(histo[tid]), histo_block[tid]);
+    tid += blockDim.x;
+  }
+  
 }
 
 __global__ void cu_baEnt(unsigned int *histo, const int numFrames,
@@ -305,3 +331,90 @@ __global__ void cu_ddEnt(unsigned int *histo, const int numFrames,
     idx += offset;
   }
 }
+
+__global__ void cu_ddEnt1(unsigned int *histo, const int numFrames, const int bins, PRECISION binSize1, PRECISION binSize2, PRECISION *plnpsum, unsigned int *occupbins) {
+
+  int idx = threadIdx.x + blockIdx.x * blockDim.x;
+  int offset = blockDim.x * gridDim.x;
+  while (idx < bins * bins) {
+    PRECISION probDens = histo[idx] / (numFrames * binSize1 * binSize2);
+    if (probDens > 0) {
+      atomicAdd(plnpsum, probDens * LOG(probDens) * binSize1 * binSize2);
+      atomicAdd(occupbins, 1);
+    }
+    idx += offset;
+  }
+}
+
+__global__ void map_ddEnt(unsigned int *histo, const int n_frames, const int n_elements, PRECISION bin_size1, PRECISION bin_size2)  {
+    unsigned int idx_g = blockIdx.x*blockDim.x + threadIdx.x;
+    
+    PRECISION n_frames_inv; 
+    PRECISION bin_inv;
+    PRECISION tmp = histo[idx_g];
+    
+    if(idx_g < n_elements){
+        n_frames_inv = 1.0 / n_frames; //TODO: maybe hand over n_frames_inv as function argument 
+        bin_inv = 1.0 / (bin_size1 * bin_size2); // same here
+        tmp = histo[idx_g] * n_frames_inv;
+        histo[idx_g] = (tmp > 0) ? tmp * LOG( tmp * bin_inv) : 0;
+    }
+}
+
+
+__global__ void cu_ddEnt2(unsigned int *histo, const int n_frames, const int n_elements, PRECISION bin_size1, PRECISION bin_size2, PRECISION *plnpsum_out, unsigned int *occupbins_out) 
+{
+    extern __shared__ PRECISION shared_mem[];
+
+    unsigned int tid = threadIdx.x;
+    unsigned int n_threads_total = blockDim.x*gridDim.x;
+    unsigned int warp_mask = (0xffffffff);
+    unsigned int idx_g = blockIdx.x*blockDim.x + threadIdx.x;
+    
+    PRECISION n_frames_inv = 1.0 / n_frames; //TODO: maybe hand over n_frames_inv as function argument 
+    PRECISION bin_inv = 1.0 / (bin_size1 * bin_size2); // same here
+
+    unsigned int occupbins = 0;
+    PRECISION plnpsum = 0;
+    PRECISION tmp = histo[idx_g];
+    if(tmp > 0){
+        tmp *= n_frames_inv;
+        plnpsum = tmp * LOG( tmp * bin_inv);
+        occupbins++;
+    }
+    
+    idx_g += n_threads_total;
+    while(idx_g < n_elements){
+        tmp = histo[idx_g];
+        if(tmp > 0){
+            tmp *= n_frames_inv;
+            plnpsum += tmp * LOG( tmp * bin_inv );
+            occupbins++;
+        }
+        idx_g += n_threads_total;
+    }
+    
+    for (unsigned int delta = warpSize/2; delta > 0; delta /= 2)
+    {
+        plnpsum += __shfl_down_sync(warp_mask, plnpsum, delta);
+    }
+    
+    if((tid % warpSize) == 0)
+    {
+        shared_mem[tid/warpSize] = plnpsum;
+    }
+    __syncthreads();
+    
+    unsigned int n_to_process = (blockDim.x/warpSize) > 0 ? (blockDim.x/warpSize) : 1;
+    if (tid < n_to_process){
+        plnpsum = shared_mem[tid];
+        for (unsigned int delta = warpSize/2; delta > 0; delta /= 2){
+            plnpsum += __shfl_down_sync(warp_mask, plnpsum, delta);
+        }
+    }
+    if (tid == 0){
+        plnpsum_out[blockIdx.x] = plnpsum;
+        occupbins_out[blockIdx.x] = occupbins;
+    }
+}
+
