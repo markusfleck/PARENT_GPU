@@ -32,12 +32,15 @@ ld -r obj/io_binary.o obj/io_text.o obj/Arg_Parser.o -o obj/io.o
 
 #~ bin/BAT_builder -t ${IN_NAME}.top -x ${IN_NAME}.xtc -o ${OUT_NAME_BAT}.bat -bb "CA C N H1 O1"
 
+g++ src/BAT_builder/convert_BAT_to_GBAT.cpp obj/util.o obj/Arg_Parser.o obj/Bat_File.o -o bin/convert_BAT_to_GBAT -Wall
+bin/convert_BAT_to_GBAT -f ${OUT_NAME_BAT}.bat -o ${OUT_NAME_BAT}.gbat
 
-g++ --std=c++11 -O3 src/process_output/get_values_from_PAR.cpp obj/io.o obj/util.o -o bin/get_values_from_PAR -Wall
 
-nvcc --std=c++11 -O3 -Xptxas -O3 -gencode=arch=compute_61,code=\"sm_61,compute_61\" src/PARENT_GPU/PARENT_GPU.cu obj/io.o obj/util.o -o bin/PARENT_GPU \
-&& nsys profile -o profiles/32_streams_16_threadload_shared_memory_512_threads --stats=true ./bin/PARENT_GPU -f ${OUT_NAME_BAT}.bat -o ${OUT_NAME}.par -b 50 \
-&& bin/get_values_from_PAR -p ${OUT_NAME}.par --short 
+#~ g++ --std=c++11 -O3 src/process_output/get_values_from_PAR.cpp obj/io.o obj/util.o -o bin/get_values_from_PAR -Wall
+
+#~ nvcc --std=c++11 -O3 -Xptxas -O3 -gencode=arch=compute_61,code=\"sm_61,compute_61\" src/PARENT_GPU/PARENT_GPU.cu obj/io.o obj/util.o -o bin/PARENT_GPU \
+#~ && nsys profile -o profiles/32_streams_16_threadload_shared_memory_512_threads --stats=true ./bin/PARENT_GPU -f ${OUT_NAME_BAT}.bat -o ${OUT_NAME}.par -b 50 \
+#~ && bin/get_values_from_PAR -p ${OUT_NAME}.par --short 
 
 
 #~ nvcc --std=c++11 -O3 -Xptxas -O3 -Xcompiler -O3,-fopenmp -gencode=arch=compute_61,code=\"sm_61,compute_61\" src/MIST_GPU/MIST_GPU.cu obj/io.o obj/util.o -o bin/MIST_GPU \

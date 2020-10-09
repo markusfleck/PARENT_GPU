@@ -20,22 +20,33 @@
 #include <iostream>
 #include <sstream>
 #include <vector>
+#include <string>
 
 class Bat {
 public:
-  Bat(char const *infileInput);
-  std::streamoff get_dofs_begin();
+  Bat(char const *infile_str);
+    ~Bat();  
+    std::streamoff get_dofs_begin();
   std::ifstream *get_file();
-  unsigned int get_n_frames();
-  unsigned int get_n_dihedrals();
-  unsigned int get_precision();
-
+  int get_n_frames();
+  int get_n_dihedrals();
+  int get_precision();
+    void set_precision(int precision);
+    void write_GBAT(char const* outfile_str);
 private:
-  void read_BAT_header();
+  void read_BAT_header(char const *infile_str);
+  void write_BAT_header(char const* outfile_str, int version);
+    void read_BAT_frame();
+    void write_BAT_frame();
+    void write_GBAT_frame(unsigned int frame_number);
+
 
   std::ifstream infile;
+    std::ofstream outfile;
+    std::string infile_string;
+    std::string outfile_string;
   int precision, n_frames;
-  unsigned int n_bonds, n_angles, n_dihedrals;
+  int n_bonds, n_angles, n_dihedrals;
   std::vector<std::vector<int>> dihedrals_top;
   std::vector<float> masses;
   std::vector<std::string> residues;
@@ -43,6 +54,14 @@ private:
   std::vector<std::string> atom_names;
   std::vector<std::string> belongs_to_molecule;
   std::streamoff dofs_begin;
+
+    float time, xtc_prec;
+    float dbox[3][3];
+    double root_origin_cartesian[3];
+    double root_origin_theta, root_origin_phi, root_origin_dihedral;
+    double *bonds_frame, *angles_frame, *dihedrals_frame;
+
+
 };
 
 #endif

@@ -34,7 +34,7 @@ using namespace std;
 
 Entropy_Matrix::Entropy_Matrix(char const *infileInput) {
   infile.exceptions(std::ifstream::badbit);
-  infile.open(infileInput, ios::binary | ios::out); // open the .par file;
+  infile.open(infileInput, ios::binary); // open the .par file;
   if (!infile.good()) {
     My_Error my_error((string("ERROR OPENING FILE ") + string(infileInput) +
                        string("! ABORTING.\n"))
