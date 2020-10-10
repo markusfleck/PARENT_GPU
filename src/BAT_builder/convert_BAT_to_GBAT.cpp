@@ -31,9 +31,10 @@ int main(int argc, char *argv[]) {
       }
       
       Bat bat(arg_parser.get_cmd_option("-f"));
+      cout<<"Converting "<<arg_parser.get_cmd_option("-f")<< " to GBAT."<<endl;
       bat.write_GBAT(arg_parser.get_cmd_option("-o"));
 
-      cout << "GBAT WRITTEN SUCCESSFULLY." << endl << endl << endl;
+      cout << "GBAT written successsfully." << endl << endl << endl;
     } catch (My_Error my_error) {
         throw my_error;
     } catch (...) {

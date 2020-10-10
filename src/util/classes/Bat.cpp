@@ -22,6 +22,8 @@ using namespace std;
 
 Bat::Bat(char const *infile_str) {
     read_BAT_header(infile_str);
+    n_bonds = n_dihedrals + 2;
+    n_angles = n_dihedrals + 1;
     bonds_frame = new double[n_bonds];
     angles_frame = new double[n_angles];
     dihedrals_frame = new double[n_dihedrals];
@@ -49,7 +51,6 @@ void Bat::read_BAT_header(char const *infile_str) {
     infile.exceptions(std::ifstream::badbit | std::ifstream::failbit |
                     std::ifstream::eofbit);
 
-      int version;
       char dummystring[31];
 
       infile.read((char *)&version,
@@ -174,7 +175,7 @@ void Bat::read_BAT_header(char const *infile_str) {
 }
 
 // to write the header of the binary .bat file
-void Bat::write_BAT_header(char const* outfile_str, int version) { //version 4 is first gbat version
+void Bat::write_BAT_header(char const* outfile_str, int version_tmp) { //version 4 is first gbat version
     try{
         this->outfile_string = string(outfile_str);
       outfile.exceptions(std::ifstream::badbit);
@@ -193,7 +194,7 @@ void Bat::write_BAT_header(char const* outfile_str, int version) { //version 4 i
       char dummystring[31];
 
       outfile.write(
-          (char *)&version,
+          (char *)&version_tmp,
           sizeof(int)); // first write the .bat version number as an integer
       
       outfile.write((char *)&precision,
@@ -515,7 +516,7 @@ void Bat::write_GBAT_frame(unsigned int frame_number){
         outfile.seekp(dofs_begin + frame_number *sizeof(float));
         outfile.write((char *)&time, sizeof(float)); // write the time of the current according .xtc frame as a float
         
-        outfile.seekp(size_t(size_t(outfile.tellp())) + (n_frames - frame_number - 1) * sizeof(float) + frame_number * sizeof(float));
+        outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * sizeof(float) + frame_number * sizeof(float));
         outfile.write((char *)&xtc_prec, sizeof(float)); // write the precision of the current frame according .xtc frame for back conversion
         
         outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * sizeof(float) + frame_number * sizeof(float) * 9);
@@ -533,26 +534,19 @@ void Bat::write_GBAT_frame(unsigned int frame_number){
         outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
         outfile.write((char *)&root_origin_dihedral, inc); // and the dihedral the root atoms form with the origin (external coordinates)
         
-        outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
-        outfile.write((char *)bonds_frame, inc); // write the lengths of the two bonds connecting the root atoms (internal coordinates)
-        
-        outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
-        outfile.write((char *)&bonds_frame[1], inc); 
-        
-        outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
-        outfile.write((char *)angles_frame, inc); // and the angle between the two rootbonds (internal coordinates)
-        
-        for (int i = 0; i < n_dihedrals; i++) { // then for all dihedrals in the system
-        
+        for(int i = 0; i < n_bonds; i++){
             outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
-            outfile.write((char *)&bonds_frame[i + 2], inc); // write the bondlength between the last two atoms in the dihedral
-            
+            outfile.write((char *)&bonds_frame[i], inc);
+        }
+        
+        for(int i = 0; i < n_angles; i++){
             outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
-            outfile.write((char *)&angles_frame[i + 1], inc); // write the angle between the last three atoms of the dihedral
-            
+            outfile.write((char *)&angles_frame[i], inc);
+        }
+        
+        for(int i = 0; i < n_dihedrals; i++){
             outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
-            outfile.write((char *)&dihedrals_frame[i], inc); // and the value of the dihedral itself
-              
+            outfile.write((char *)&dihedrals_frame[i], inc);
         }
 
     
@@ -584,7 +578,135 @@ void Bat::write_GBAT(char const* outfile_str){
     }
 }
 
+template <class T>
+void Bat::load_dofs(T* type_addr[3], int type_id_start[3], int type_id_end[3]) {
+    try{
+    
+        unsigned char inc;
+        if (precision == 1) {
+            inc = sizeof(double); // if trajectory is in double precision
+        } 
+        else {
+            inc = sizeof(float);
+        }
+    
+        if(version == 3){
+            
+            T* bonds = type_addr[TYPE_B];
+            T* angles = type_addr[TYPE_A];
+            T* dihedrals = type_addr[TYPE_D];
+        
+            infile.seekg(dofs_begin);
+            for (int frame = 0; frame < n_frames; frame++) {
+              // to read a frame from the .bat trajectory
+              double ddummy[6];
+              float fdummy[11];
+              int a_start_g = n_bonds;
+              int d_start_g = n_bonds + n_angles;
+              int b_counter_g = 0;
+              int a_counter_g = a_start_g;
+              int d_counter_g = d_start_g;
+              int b_counter_lt = 0;
+              int a_counter_lt = 0;
+              int d_counter_lt = 0;
 
+              if (frame % 100000 == 0) {
+                cout << "Reading frame " << frame
+                     << " and the following.\n"; // every 10000 frames issue an
+                                                 // information to stdout
+                cout.flush();
+              }
+
+              infile.read(
+                  (char *)fdummy,
+                  11 *
+                      sizeof(float)); // read time, precision and box vectors to dummies
+              
+              
+              infile.read((char *)ddummy, 6 * inc); // external coordinates to dummies
+              
+
+              infile.read((char *)ddummy,
+                         inc); // read the lengths of the two bonds connecting the root
+                               // atoms (internal coordinates)
+              
+              if ((b_counter_g >= type_id_start[TYPE_B]) &&
+                  (b_counter_g <= type_id_end[TYPE_B]))
+                bonds[b_counter_lt++ * n_frames + frame] = ddummy[0];
+              b_counter_g++;
+
+              infile.read((char *)ddummy,
+                         inc); // read the lengths of the two bonds connecting the root
+                               // atoms (internal coordinates)
+              
+              if ((b_counter_g >= type_id_start[TYPE_B]) &&
+                  (b_counter_g <= type_id_end[TYPE_B]))
+                bonds[b_counter_lt++ * n_frames + frame] = ddummy[0];
+              b_counter_g++;
+
+              infile.read((char *)ddummy, inc); // and the angle between the two
+                                               // rootbonds (internal coordinates)
+              
+              if ((a_counter_g >= type_id_start[TYPE_A]) &&
+                  (a_counter_g <= type_id_end[TYPE_A]))
+                angles[a_counter_lt++ * n_frames + frame] = ddummy[0];
+              a_counter_g++;
+
+              for (int i = 0; i < n_dihedrals;
+                   i++) {                        // then for all dihedrals in the system
+                infile.read((char *)ddummy, inc); // read the bondlength between the last
+                                                 // two atoms in the dihedral
+                
+                if ((b_counter_g >= type_id_start[TYPE_B]) &&
+                    (b_counter_g <= type_id_end[TYPE_B]))
+                  bonds[b_counter_lt++ * n_frames + frame] = ddummy[0];
+                b_counter_g++;
+
+                infile.read((char *)ddummy, inc); // read the angle between the last
+                                                 // threee atoms of the dihedral#
+                
+                if ((a_counter_g >= type_id_start[TYPE_A]) &&
+                    (a_counter_g <= type_id_end[TYPE_A]))
+                  angles[a_counter_lt++ * n_frames + frame] = ddummy[0];
+                a_counter_g++;
+
+                infile.read((char *)ddummy, inc); // and the value of the dihedral itself
+                
+                if ((d_counter_g >= type_id_start[TYPE_D]) &&
+                    (d_counter_g <= type_id_end[TYPE_D]))
+                  dihedrals[d_counter_lt++ * n_frames + frame] = ddummy[0];
+                d_counter_g++;
+              }
+            }
+        }
+        else if(version == 4){
+            
+            for(unsigned int type = 0; type < 3; type++){
+                if ( (type_id_start[type] >= 0) && (type_id_end[type] >= 0) ){
+                    infile.seekg(dofs_begin + n_frames * (11 * sizeof(float) + (6 + type_id_start[type]) * inc) );
+                    infile.read((char *)type_addr[type], n_frames * (type_id_end[type] - type_id_start[type] + 1) * inc);
+                }
+            }
+        
+        }
+        else{
+            My_Error my_error((string("ERROR WHILE READING BAT ") +
+                       outfile_string + string("! VERSION NOT SUPPORTED. ABORTING."))
+                          .c_str());
+            throw my_error;
+        }
+    } catch (My_Error my_error) {
+        throw my_error;
+    } catch (...) {
+        My_Error my_error((string("ERROR WHILE READING BAT ") +
+                       outfile_string + string("! ABORTING."))
+                          .c_str());
+        throw my_error;
+    }
+  }
+
+template void Bat::load_dofs(float* type_addr[3], int type_id_start[3], int type_id_end[3]);
+template void Bat::load_dofs(double* type_addr[3], int type_id_start[3], int type_id_end[3]);
 
 
 

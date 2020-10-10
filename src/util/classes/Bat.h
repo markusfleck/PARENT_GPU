@@ -21,6 +21,7 @@
 #include <sstream>
 #include <vector>
 #include <string>
+#include "../types.h"
 
 class Bat {
 public:
@@ -33,6 +34,8 @@ public:
   int get_precision();
     void set_precision(int precision);
     void write_GBAT(char const* outfile_str);
+    template <class T>
+    void load_dofs(T* type_addr[3], int type_id_start[3], int type_id_end[3]); 
 private:
   void read_BAT_header(char const *infile_str);
   void write_BAT_header(char const* outfile_str, int version);
@@ -60,6 +63,7 @@ private:
     double root_origin_cartesian[3];
     double root_origin_theta, root_origin_phi, root_origin_dihedral;
     double *bonds_frame, *angles_frame, *dihedrals_frame;
+    int version;
 
 
 };

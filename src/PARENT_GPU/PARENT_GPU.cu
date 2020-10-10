@@ -151,7 +151,8 @@ public:
     angles = type_addr[TYPE_A];
     dihedrals = type_addr[TYPE_D];
 
-    load_dofs(block_start);
+    bat->load_dofs(type_addr, type_id_start, type_id_end);
+
     modfit_dihedrals();
     if (!extrema_calculated) {
       calculate_extrema();
@@ -167,7 +168,7 @@ public:
             type_id_start[type] + i * gpu_dofs_per_block;
         unsigned int block_id_end =
             type_id_start[type] + (i + 1) * gpu_dofs_per_block - 1;
-        if (block_id_end > type_id_end[type])
+        if (int(block_id_end) > type_id_end[type])
           block_id_end = type_id_end[type];
         PRECISION *cpu_ram_start =
             block_start + (block_id_start - dof_id_start_g) * n_frames;
@@ -178,101 +179,7 @@ public:
     }
   }
 
-  unsigned char load_dofs(PRECISION *dof_bank) {
-    unsigned char fail = 0;
-    ifstream *file = bat->get_file();
-
-    file->seekg(bat->get_dofs_begin());
-    for (unsigned int frame = 0; frame < n_frames; frame++) {
-      // to read a frame from the .bat trajectory
-      double ddummy[6];
-      float fdummy[11];
-      unsigned int a_start_g = get_min_id_for_type(TYPE_A, n_dihedrals);
-      unsigned int d_start_g = get_min_id_for_type(TYPE_D, n_dihedrals);
-      unsigned int b_counter_g = 0;
-      unsigned int a_counter_g = a_start_g;
-      unsigned int d_counter_g = d_start_g;
-      unsigned int b_counter_lt = 0;
-      unsigned int a_counter_lt = 0;
-      unsigned int d_counter_lt = 0;
-
-      if (frame % 100000 == 0) {
-        cout << "Reading frame " << frame
-             << " and the following.\n"; // every 10000 frames issue an
-                                         // information to stdout
-        cout.flush();
-      }
-
-      file->read(
-          (char *)fdummy,
-          11 *
-              sizeof(float)); // read time, precision and box vectors to dummies
-      fail = fail | (file->rdstate() & std::ifstream::failbit);
-      unsigned char inc;
-      if (precision_traj == 1) {
-        inc = sizeof(double); // if trajectory is in double precision
-      } else {
-        inc = sizeof(float);
-      }
-      file->read((char *)ddummy, 6 * inc); // external coordinates to dummies
-      fail = fail | (file->rdstate() & std::ifstream::failbit);
-
-      file->read((char *)ddummy,
-                 inc); // read the lengths of the two bonds connecting the root
-                       // atoms (internal coordinates)
-      fail = fail | (file->rdstate() & std::ifstream::failbit);
-      if ((b_counter_g >= type_id_start[TYPE_B]) &&
-          (b_counter_g <= type_id_end[TYPE_B]))
-        bonds[b_counter_lt++ * n_frames + frame] = ddummy[0];
-      b_counter_g++;
-
-      file->read((char *)ddummy,
-                 inc); // read the lengths of the two bonds connecting the root
-                       // atoms (internal coordinates)
-      fail = fail | (file->rdstate() & std::ifstream::failbit);
-      if ((b_counter_g >= type_id_start[TYPE_B]) &&
-          (b_counter_g <= type_id_end[TYPE_B]))
-        bonds[b_counter_lt++ * n_frames + frame] = ddummy[0];
-      b_counter_g++;
-
-      file->read((char *)ddummy, inc); // and the angle between the two
-                                       // rootbonds (internal coordinates)
-      fail = fail | (file->rdstate() & std::ifstream::failbit);
-      if ((a_counter_g >= type_id_start[TYPE_A]) &&
-          (a_counter_g <= type_id_end[TYPE_A]))
-        angles[a_counter_lt++ * n_frames + frame] = ddummy[0];
-      a_counter_g++;
-
-      for (int i = 0; i < n_dihedrals;
-           i++) {                        // then for all dihedrals in the system
-        file->read((char *)ddummy, inc); // read the bondlength between the last
-                                         // two atoms in the dihedral
-        fail = fail | (file->rdstate() & std::ifstream::failbit);
-        if ((b_counter_g >= type_id_start[TYPE_B]) &&
-            (b_counter_g <= type_id_end[TYPE_B]))
-          bonds[b_counter_lt++ * n_frames + frame] = ddummy[0];
-        b_counter_g++;
-
-        file->read((char *)ddummy, inc); // read the angle between the last
-                                         // threee atoms of the dihedral#
-        fail = fail | (file->rdstate() & std::ifstream::failbit);
-        if ((a_counter_g >= type_id_start[TYPE_A]) &&
-            (a_counter_g <= type_id_end[TYPE_A]))
-          angles[a_counter_lt++ * n_frames + frame] = ddummy[0];
-        a_counter_g++;
-
-        file->read((char *)ddummy, inc); // and the value of the dihedral itself
-        fail = fail | (file->rdstate() & std::ifstream::failbit);
-        if ((d_counter_g >= type_id_start[TYPE_D]) &&
-            (d_counter_g <= type_id_end[TYPE_D]))
-          dihedrals[d_counter_lt++ * n_frames + frame] = ddummy[0];
-        d_counter_g++;
-      }
-    }
-
-    return fail; // if anything failed return a 1, otherwise a 0
-  }
-
+ 
   void modfit_dihedrals() {
     if (type_n_dofs[TYPE_D] == 0)
       return;
@@ -287,7 +194,7 @@ public:
       long long int histo[MODFITNBINS];
 
 #pragma omp for
-      for (int j = 0; j < type_n_dofs[TYPE_D]; j++) { // for all dihedrals
+      for (unsigned int j = 0; j < type_n_dofs[TYPE_D]; j++) { // for all dihedrals
         // first build a histogram of the dihedral values over the trajectory
         for (int k = 0; k < MODFITNBINS; k++)
           histo[k] = 0;
@@ -295,7 +202,7 @@ public:
         binsize = (2 * pi +
                    5e-9 * (sizeof(PRECISION) == sizeof(float) ? 100000 : 1)) /
                   MODFITNBINS;
-        for (int i = 0; i < n_frames; i++)
+        for (unsigned int i = 0; i < n_frames; i++)
           histo[int((dihedrals[j * n_frames + i]) / binsize)] += 1;
 
         zeroExists = false;
@@ -343,7 +250,7 @@ public:
         modFit = 2 * pi - (longestZeroStretchPos + 0.5) *
                               binsize; // calculate the shift to put the zero
                                        // stretch to the 2pi end
-        for (int k = 0; k < n_frames; k++) {
+        for (unsigned int k = 0; k < n_frames; k++) {
           dihedrals[j * n_frames + k] =
               dihedrals[j * n_frames + k] + modFit -
               2 * pi *
@@ -360,10 +267,10 @@ public:
       PRECISION tmpMin, tmpMax;
 
 #pragma omp for
-      for (int j = 0; j < n_dofs; j++) { // for all dofs
+      for (unsigned int j = 0; j < n_dofs; j++) { // for all dofs
         tmpMax = block_start[j * n_frames];
         tmpMin = block_start[j * n_frames];
-        for (int i = 1; i < n_frames; i++) { // and all frames
+        for (unsigned int i = 1; i < n_frames; i++) { // and all frames
           if (block_start[j * n_frames + i] > tmpMax) {
             tmpMax = block_start[j * n_frames + i];
           }
@@ -400,14 +307,14 @@ public:
       long long int histo[n_bins];
       int occupbins;
 #pragma omp for
-      for (int j = dof_id_start_g; j <= dof_id_end_g;
+      for (unsigned int j = dof_id_start_g; j <= dof_id_end_g;
            j++) { // for all dofs (using threads)
-        for (int k = 0; k < n_bins; k++) {
+        for (unsigned int k = 0; k < n_bins; k++) {
           histo[k] = 0; // initialize a histogram with zeros
         }
         binsize = (maxima[j] - minima[j]) /
                   n_bins; // and calculate the size of the bins
-        for (int i = 0; i < n_frames;
+        for (unsigned int i = 0; i < n_frames;
              i++) { // and fill the histogram using all frames of the trajectory
           histo[int(
               (block_start[(j - dof_id_start_g) * n_frames + i] - minima[j]) /
@@ -417,7 +324,8 @@ public:
                        // entropy, taking care of the Jacobian
         plnpsum = 0;
         binval = minima[j] + (binsize / 2.0);
-        for (int k = 0; k < n_bins; k++) {
+        Jac = 1;
+        for (unsigned int k = 0; k < n_bins; k++) {
           switch (get_dof_type_from_id(j, n_dihedrals)) {
           case TYPE_B:
             Jac = binval * binval;
@@ -426,7 +334,6 @@ public:
             Jac = sin(binval);
             break;
           case TYPE_D:
-            Jac = 1;
             break;
           }
           probDens = histo[k] / (n_frames * binsize * Jac);
@@ -1065,8 +972,10 @@ int main(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
   }
 
-  if (strcmp(arg_parser.get_extension(arg_parser.get_cmd_option("-f")),
-             "bat") ||
+  if ((strcmp(arg_parser.get_extension(arg_parser.get_cmd_option("-f")),
+             "bat")
+        && strcmp(arg_parser.get_extension(arg_parser.get_cmd_option("-f")),
+             "gbat"))||
       strcmp(arg_parser.get_extension(arg_parser.get_cmd_option("-o")),
              "par")) {
     // check for the extensions of the input and output file
