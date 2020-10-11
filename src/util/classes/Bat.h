@@ -21,6 +21,7 @@
 #include <sstream>
 #include <vector>
 #include <string>
+#include <cstring>
 #include "../types.h"
 
 class Bat {
@@ -28,17 +29,22 @@ public:
   Bat(char const *infile_str);
     ~Bat();  
     std::streamoff get_dofs_begin();
-  std::ifstream *get_file();
-  int get_n_frames();
-  int get_n_dihedrals();
-  int get_precision();
+    std::ifstream *get_infile();
+    std::ofstream *get_outfile();
+    int get_n_frames();
+    int get_n_bonds();
+    int get_n_angles();
+    int get_n_dihedrals();
+    int get_n_dofs();
+    int get_precision();
     void set_precision(int precision);
     void write_GBAT(char const* outfile_str);
-    template <class T>
-    void load_dofs(T* type_addr[3], int type_id_start[3], int type_id_end[3]); 
+    void write_BAT_header(char const* outfile_str, int version);
+    template <class T> void load_dofs(T* type_addr[3], int type_id_start[3], int type_id_end[3]);
+    template <class T> void load_externals(float* tpd, T* externals);      
+
 private:
   void read_BAT_header(char const *infile_str);
-  void write_BAT_header(char const* outfile_str, int version);
     void read_BAT_frame();
     void write_BAT_frame();
     void write_GBAT_frame(unsigned int frame_number);
@@ -49,7 +55,7 @@ private:
     std::string infile_string;
     std::string outfile_string;
   int precision, n_frames;
-  int n_bonds, n_angles, n_dihedrals;
+  int n_bonds, n_angles, n_dihedrals, n_dofs;
   std::vector<std::vector<int>> dihedrals_top;
   std::vector<float> masses;
   std::vector<std::string> residues;

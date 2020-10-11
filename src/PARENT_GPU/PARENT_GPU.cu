@@ -959,7 +959,7 @@ int main(int argc, char *argv[]) {
   vector<string> belongsToMolecule;
 
   if (argc != 7) {
-    cerr << "USAGE: " << argv[0] << " -f input.bat -o entropy.par -b #bins\n";
+    cerr << "USAGE: " << argv[0] << " -f input.[g]bat -o entropy.par -b #bins\n";
     exit(EXIT_FAILURE);
   }
 
@@ -968,7 +968,7 @@ int main(int argc, char *argv[]) {
       !arg_parser.cmd_option_exists("-o") ||
       !arg_parser.cmd_option_exists("-b")) {
     // check for correct command line options
-    cerr << "USAGE: " << argv[0] << " -f input.bat -o entropy.par -b #bins\n";
+    cerr << "USAGE: " << argv[0] << " -f input.[g]bat -o entropy.par -b #bins\n";
     exit(EXIT_FAILURE);
   }
 
@@ -979,7 +979,7 @@ int main(int argc, char *argv[]) {
       strcmp(arg_parser.get_extension(arg_parser.get_cmd_option("-o")),
              "par")) {
     // check for the extensions of the input and output file
-    cerr << "USAGE: " << argv[0] << " -f input.bat -o entropy.par -b #bins\n";
+    cerr << "USAGE: " << argv[0] << " -f input.[g]bat -o entropy.par -b #bins\n";
     exit(EXIT_FAILURE);
   }
   if (sscanf(arg_parser.get_cmd_option("-b"), "%ud", &n_bins) != 1) {
@@ -990,9 +990,9 @@ int main(int argc, char *argv[]) {
   }
 
   size_t cpu_ram_available =
-      static_cast<size_t>(1024) * 1024 * 1024 * 58;
+      static_cast<size_t>(1024) * 1024 * 1024 * 58; //TODO: check avalable--------------------------------------------------
   size_t gpu_ram_available =
-      static_cast<size_t>(1024) * 1024 * 1024 * 7.5;
+      static_cast<size_t>(1024) * 1024 * 1024 * 7.5; //TODO: check avalable--------------------------------------------------
 
   PARENT_GPU parent_gpu(cpu_ram_available, gpu_ram_available,
                         arg_parser.get_cmd_option("-f"), n_bins,
