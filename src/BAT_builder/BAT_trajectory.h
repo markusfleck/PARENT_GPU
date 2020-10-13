@@ -36,7 +36,7 @@
 
 #include <vector>
 #include <string>
-#include "../util/io/xdrfile/xdrfile_xtc.h"
+#include <gromacs/fileio/xtcio.h>
 
 
 
@@ -56,7 +56,7 @@ public:
     std::vector <std::string> atomNames;
     std::vector <std::string> belongsToMolecule;
     std::string trjFileIn,trjFileOut;
-    rvec *x;
+
     double root_origin_cartesian[3];
     double root_origin_phi;
     double root_origin_theta;
@@ -68,11 +68,19 @@ public:
     double *dihedrals;
     double *bondsFull,*anglesFull;
     float *masses;
-    int step;
-    float time,prec;
-    matrix box;
+
     double pi;
     int numframes;
+    
+    struct t_fileio* xtc_ifile;
+    struct t_fileio* xtc_ofile;
+    int natoms;
+    int64_t step;
+    real time;
+    matrix box;
+    rvec*  x;
+    real prec;
+    gmx_bool bOK;
     
     int convert_xtc_to_BAT();
     int convert_BAT_to_xtc();
