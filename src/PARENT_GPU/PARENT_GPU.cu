@@ -660,7 +660,7 @@ public:
                    // ram->gpu_ram_layout->dofs_per_block)
     gpuErrchk(cudaMemset(ram->gpu_ram_layout->result, 0, bytes_to_zero));
 
-    
+
     for (unsigned int i = 0; i < block1->n_dofs; i++) {
       for (unsigned int j = 0; j < block2->n_dofs; j++) {
         
@@ -767,6 +767,7 @@ public:
                          ram->gpu_ram_layout->occupied_bins,
                          block1->n_dofs * block2->n_dofs * sizeof(PRECISION),
                          cudaMemcpyDeviceToHost));
+    
 
     for (unsigned int i = 0; i < block1->n_dofs; i++) {
       for (unsigned int j = 0; j < block2->n_dofs; j++) {
@@ -836,6 +837,7 @@ public:
     //}
     //gpuErrchk(cudaPeekAtLastError());
 
+
     for (unsigned int i = 0; i < block->n_dofs - 1; i++) {
       for (unsigned int j = i + 1; j < block->n_dofs; j++) {
         unsigned int dof1_g = i + block->dof_id_start_g;
@@ -902,6 +904,7 @@ public:
                          ram->gpu_ram_layout->occupied_bins,
                          block->n_dofs * block->n_dofs * sizeof(PRECISION),
                          cudaMemcpyDeviceToHost));
+    
 
     for (unsigned int i = 0; i < block->n_dofs - 1; i++) {
       for (unsigned int j = i + 1; j < block->n_dofs; j++) {

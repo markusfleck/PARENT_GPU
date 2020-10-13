@@ -1,4 +1,5 @@
 #include <iostream>
+#include <sstream>
 #include "../util/classes/Bat.h"
 #include "../util/util.h"
 #include "../util/io/io.h"
@@ -9,8 +10,8 @@ using namespace std;
 int main(int argc, char *argv[]) {
     try{
 
-      if (argc != 5) {
-        cerr << "USAGE: " << argv[0] << " -f input.bat -o ouput.gbat\n";
+      if (argc != 7) {
+        cerr << "USAGE: " << argv[0] << " -f input.bat -o ouput.gbat --ram #GiB\n";
         exit(EXIT_FAILURE);
       }
 
@@ -18,7 +19,7 @@ int main(int argc, char *argv[]) {
       if (!arg_parser.cmd_option_exists("-f") ||
           !arg_parser.cmd_option_exists("-o")) {
         // check for correct command line options
-        cerr << "USAGE: " << argv[0] << " -f input.bat -o ouput.gbat\n";
+        cerr << "USAGE: " << argv[0] << " -f input.bat -o ouput.gbat --ram #GiB\n";
         exit(EXIT_FAILURE);
       }
 
@@ -27,7 +28,7 @@ int main(int argc, char *argv[]) {
           strcmp(arg_parser.get_extension(arg_parser.get_cmd_option("-o")),
                  "gbat")) {
         // check for the extensions of the input and output file
-        cerr << "USAGE: " << argv[0] << " -f input.bat -o ouput.gbat\n";
+        cerr << "USAGE: " << argv[0] << " -f input.bat -o ouput.gbat --ram #GiB\n";
         exit(EXIT_FAILURE);
       }
       
@@ -37,28 +38,33 @@ int main(int argc, char *argv[]) {
       
       bat.write_BAT_header(arg_parser.get_cmd_option("-o"), 4);
       
-      size_t cpu_ram_available =
-      static_cast<size_t>(1024) * 1024 * 1024 * 58; //TODO: check available--------------------------------------------------
-      char* mem = new char[cpu_ram_available];
+      unsigned int inc = (bat.get_precision() == 0) ? sizeof(float) : sizeof(double);
+      size_t n_frames = bat.get_n_frames();
       
-      
-      //~ cout<<"Mem: "<<static_cast<void*>(mem)<<endl;
-      
-        unsigned int inc = (bat.get_precision() == 0) ? sizeof(float) : sizeof(double);
-        size_t n_frames = bat.get_n_frames();
-        unsigned int n_dofs_load = cpu_ram_available / (n_frames * inc);
-      cout<<cpu_ram_available/1000000<<" "<<inc * n_dofs_load * n_frames /1000000<<endl;
-      
-      //~ for(size_t i = 0; i < n_dofs_load * n_frames * inc;i++){
-      //~ for(size_t i = 0; i < cpu_ram_available;i++){
-        //~ mem[i]=0;
-        //~ if(i%1000000==0)cout<<i/1000000<<endl;
-      //~ }
-      //~ cout<<n_dofs_load<<endl;
       unsigned int n_dofs = bat.get_n_dofs();
       unsigned int n_dihedrals = bat.get_n_dihedrals();
       
+      stringstream ram_str(arg_parser.get_cmd_option("--ram"));
+      double ram_provided;
+      ram_str >> ram_provided;
+      size_t cpu_ram_available = static_cast<size_t>(1024) * 1024 * 1024 * ram_provided;
       
+      unsigned int n_dofs_load = cpu_ram_available / (n_frames * inc);
+      size_t externals_bytes = n_frames * (11 * sizeof(float) + 6 * inc);
+      if(externals_bytes > cpu_ram_available){
+        My_Error my_error((string("ERROR: OUT OF MEMORY! YOU NEED TO PROVIDE AT LEAST ") +
+                       to_string(externals_bytes/1024/1024/1024) + string(" GiB TO STORE THE EXTERNAL DEGREES OF FREEDOM (MORE RAM WILL SIGNIFICANTLY INCREASE PERFORMANCE). ABORTING."))
+                          .c_str());
+        throw my_error;
+      } 
+      
+      if(n_dofs_load > n_dofs) {
+        n_dofs_load = n_dofs;
+        cpu_ram_available = n_dofs_load * n_frames * inc;
+        if(cpu_ram_available < externals_bytes) cpu_ram_available = externals_bytes;
+      }
+      char* mem = new char[cpu_ram_available];
+
       ofstream* outfile = bat.get_outfile();
       
       if(bat.get_precision() == 0){ //TODO: check if the RAM is even sufficient to hold the externals
@@ -119,10 +125,7 @@ int main(int argc, char *argv[]) {
             type_addr[TYPE_A] = (double*) mem + n_frames * type_n_dofs[TYPE_B];
             type_addr[TYPE_D] = (double*) mem + n_frames * (type_n_dofs[TYPE_B] + type_n_dofs[TYPE_A]);
             
-            //~ cout<<"H1"<<endl;
-            //~ for(int i = 0; i < 3; i++)cout<<type_id_start[i]<<" "<<type_id_end[i]<<endl;
             bat.load_dofs(type_addr, type_id_start, type_id_end);
-            //~ cout<<"H2"<<endl;
             outfile->write(mem, dofs_loaded * n_frames * sizeof(double));
           }
           
