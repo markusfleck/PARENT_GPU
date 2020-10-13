@@ -8,7 +8,7 @@ mkdir obj
 
 export OMP_NUM_THREADS=24;
 CPU_RAM="50.4"
-GPU_RAM="0.7"
+GPU_RAM="7.5"
 #~ PROFILE="nsys profile -o profiles/tmp --stats=true --force-overwrite true"
 
 #~ IN_NAME="complexes/1UGH/1UGH"

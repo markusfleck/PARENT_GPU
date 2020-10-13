@@ -355,6 +355,8 @@ public:
 
 class GPU_RAM_Layout {
 public:
+  char *gpu_ram_start;
+  size_t gpu_n_bytes;
   unsigned int dofs_per_block;
   PRECISION *dof_block_1;
   PRECISION *dof_block_2;
@@ -363,13 +365,26 @@ public:
   unsigned int *histograms;
 
   GPU_RAM_Layout(unsigned int n_frames, unsigned int n_bins,
-                 size_t gpu_n_bytes, char *gpu_ram_start) {
+                 size_t gpu_n_bytes, unsigned int n_dofs_total) {
     // calculate the maximum number of dofs (for one of the two dof_blocks) so
     // that everything still fits into GPU RAM
     double a = 2 * n_frames * sizeof(PRECISION);
     double b = sizeof(PRECISION) + sizeof(unsigned int) * (n_bins * n_bins + 1);
-    this->dofs_per_block =
+    dofs_per_block =
         (unsigned int)((-a / 2 + sqrt(a * a / 4 + gpu_n_bytes * b)) / b);
+                 
+    
+                 
+    // if all dofs fit into RAM, still set up two blocks to be consistent with
+    // the algorithm
+    if (2 * dofs_per_block > n_dofs_total) {
+      dofs_per_block = n_dofs_total / 2;
+      dofs_per_block += n_dofs_total % 2;
+    }
+    
+    gpu_n_bytes = (static_cast<size_t>(2) * dofs_per_block * n_frames + dofs_per_block * dofs_per_block) * sizeof(PRECISION) + ( dofs_per_block * dofs_per_block * (n_bins * n_bins + 1) ) * sizeof(unsigned int);
+    gpuErrchk(cudaMalloc((void **)&gpu_ram_start, gpu_n_bytes));
+    this->gpu_n_bytes = gpu_n_bytes;
 
     // set the pointers for partitioning the GPU RAM according to the calculated
     // dofs_per_block
@@ -384,7 +399,6 @@ public:
 class CPU_RAM_Layout {
 public:
   char *cpu_ram_start;
-  char *cpu_ram_end;
   size_t cpu_n_bytes;
   unsigned int dofs_per_block;
   PRECISION *dof_block_1;
@@ -432,15 +446,14 @@ public:
     }
     // if all dofs fit into RAM, still set up two blocks to be consistent with
     // the algorithm
-    if (2 * dofs_per_block >= n_dofs_total) {
+    if (2 * dofs_per_block > n_dofs_total) {
       dofs_per_block = n_dofs_total / 2;
       dofs_per_block += n_dofs_total % 2; //TODO: In this case, only load the trajectory once
     }
     
-    cpu_n_bytes = sizeof(PRECISION) * (2 * dofs_per_block * n_frames + 3 * n_dofs_total + n_dofs_total * (n_dofs_total - 1) / 2 + 2 * (2 * gpu_dofs_per_block - 1) * gpu_dofs_per_block);
+    cpu_n_bytes = (static_cast<size_t>(2) * dofs_per_block * n_frames + 3 * n_dofs_total + n_dofs_total * (n_dofs_total - 1) / 2 + 2 * (2 * gpu_dofs_per_block - 1) * gpu_dofs_per_block) * sizeof(PRECISION);
     
     cpu_ram_start = new char[cpu_n_bytes];
-    cpu_ram_end = cpu_ram_start + cpu_n_bytes - 1;
     this->cpu_n_bytes = cpu_n_bytes;
 
     // set the pointers for partitioning the CPU RAM according to the calculated
@@ -477,9 +490,7 @@ public:
 class RAM {
 public:
   
-  char *gpu_ram_start;
-  char *gpu_ram_end;
-  size_t gpu_n_bytes;
+  
   GPU_RAM_Layout *gpu_ram_layout;
   CPU_RAM_Layout *cpu_ram_layout;
   unsigned int n_dihedrals;
@@ -488,14 +499,12 @@ public:
 
   RAM(size_t cpu_n_bytes, size_t gpu_n_bytes,
       Bat *bat, unsigned int n_bins) {
-    
-    gpuErrchk(cudaMalloc((void **)&gpu_ram_start, gpu_n_bytes));
-    gpu_ram_end = gpu_ram_start + gpu_n_bytes - 1;
-    this->gpu_n_bytes = gpu_n_bytes;
-    gpu_ram_layout = new GPU_RAM_Layout(bat->get_n_frames(), n_bins,
-                                        gpu_n_bytes, gpu_ram_start);
+      
     this->n_dihedrals = bat->get_n_dihedrals();
     this->n_dofs_total = 3 * (n_dihedrals + 1);
+
+    gpu_ram_layout = new GPU_RAM_Layout(bat->get_n_frames(), n_bins,
+                                        gpu_n_bytes, n_dofs_total);
     cpu_ram_layout =
         new CPU_RAM_Layout(bat->get_n_frames(), cpu_n_bytes, gpu_ram_layout->dofs_per_block, n_dihedrals);
     for (unsigned int i = 0; i < n_dofs_total;
