@@ -428,14 +428,12 @@ public:
     unsigned int n_angles = n_dihedrals + 1;
     // calculate the maximum number of dofs (for one of the two dof_blocks) so
     // that everything still fits into CPU RAM
-                 
-    //~ dofs_per_block =
-        //~ (unsigned int)((cpu_n_bytes - n_dofs_total * ((n_dofs_total + 3) * sizeof(PRECISION) + sizeof(double)) + (2 * gpu_dofs_per_block - 1) * gpu_dofs_per_block * (sizeof(PRECISION) + sizeof(unsigned int))) / (2 * n_frames * sizeof(PRECISION)));
-                 
-    dofs_per_block = (cpu_n_bytes - gpu_dofs_per_block * gpu_dofs_per_block) / sizeof(PRECISION);
-    dofs_per_block -= 3 * n_dofs_total + n_dofs_total * ( n_dofs_total - 1 ) / 2;
-    dofs_per_block /= 2 * n_frames;             
-                 
+
+
+    dofs_per_block = ( cpu_n_bytes - gpu_dofs_per_block * gpu_dofs_per_block * ( sizeof(PRECISION) + sizeof(unsigned int) )  - (3 * n_dofs_total + n_dofs_total * ( n_dofs_total - 1 ) / 2) * sizeof(PRECISION) )
+                   / double( 2 * n_frames * sizeof(PRECISION) );
+
+    
     if (dofs_per_block < gpu_dofs_per_block) {
       cerr << "WARNING: You probably have a GPU with a lot of RAM but your CPU "
               "RAM is rather small. ";
@@ -445,12 +443,14 @@ public:
     }
     // if all dofs fit into RAM, still set up two blocks to be consistent with
     // the algorithm
+    
     if (2 * dofs_per_block > n_dofs_total) {
       dofs_per_block = n_dofs_total / 2;
       dofs_per_block += n_dofs_total % 2; //TODO: In this case, only load the trajectory once
     }
     
     cpu_n_bytes = (static_cast<size_t>(2) * dofs_per_block * n_frames + 3 * n_dofs_total + n_dofs_total * (n_dofs_total - 1) / 2) * sizeof(PRECISION) + gpu_dofs_per_block * gpu_dofs_per_block * ( sizeof(PRECISION) + sizeof(unsigned int) );
+    
     
     cpu_ram_start = new char[cpu_n_bytes];
     this->cpu_n_bytes = cpu_n_bytes;
@@ -659,15 +659,11 @@ public:
   }
 
   void calculate_block_pair_gpu(GPU_RAM_Block *block1, GPU_RAM_Block *block2) {
-
-    size_t bytes_to_zero = ram->gpu_ram_layout->dofs_per_block;
-    bytes_to_zero *=
-        ram->gpu_ram_layout->dofs_per_block *
+        size_t bytes_to_zero = ram->gpu_ram_layout->dofs_per_block *ram->gpu_ram_layout->dofs_per_block*
         (sizeof(PRECISION) +
          sizeof(unsigned int) *
              (n_bins * n_bins +
-              1)); // TODO: zero only what is needed(block1->n_dofs instead of
-                   // ram->gpu_ram_layout->dofs_per_block)
+              1)); 
     gpuErrchk(cudaMemset(ram->gpu_ram_layout->result, 0, bytes_to_zero));
 
 
@@ -805,8 +801,7 @@ public:
         (sizeof(PRECISION) +
          sizeof(unsigned int) *
              (n_bins * n_bins +
-              1)); // TODO: zero only what is needed(block1->n_dofs instead of
-                   // ram->gpu_ram_layout->dofs_per_block)
+              1));
     gpuErrchk(cudaMemset(ram->gpu_ram_layout->result, 0, bytes_to_zero));
   
 

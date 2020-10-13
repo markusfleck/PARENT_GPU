@@ -7,17 +7,17 @@ mkdir obj
 #~ mkdir output
 
 export OMP_NUM_THREADS=24;
-CPU_RAM="50.4"
+CPU_RAM="58"
 GPU_RAM="7.5"
 #~ PROFILE="nsys profile -o profiles/tmp --stats=true --force-overwrite true"
 
-#~ IN_NAME="complexes/1UGH/1UGH"
-#~ OUT_NAME_BAT="complexes/output/1UGH"
-#~ OUT_NAME="complexes/output/double_prec/1UGH"
+IN_NAME="complexes/1UGH/1UGH"
+OUT_NAME_BAT="complexes/output/1UGH"
+OUT_NAME="complexes/output/double_prec/1UGH"
 
-IN_NAME="complexes/2KTF/UBM2_1"
-OUT_NAME_BAT="complexes/output/UBM2_1"
-OUT_NAME="complexes/output/double_prec/UBM2_1"
+#~ IN_NAME="complexes/2KTF/UBM2_1"
+#~ OUT_NAME_BAT="complexes/output/UBM2_1"
+#~ OUT_NAME="complexes/output/double_prec/UBM2_1"
 
 #~ IN_NAME="complexes/1JIW/1JIW"
 #~ OUT_NAME_BAT="complexes/output/1JIW"
