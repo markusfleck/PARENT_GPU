@@ -383,6 +383,9 @@ public:
 
 class CPU_RAM_Layout {
 public:
+  char *cpu_ram_start;
+  char *cpu_ram_end;
+  size_t cpu_n_bytes;
   unsigned int dofs_per_block;
   PRECISION *dof_block_1;
   PRECISION *dof_block_2;
@@ -405,14 +408,14 @@ public:
   unsigned int *tmp_result_occupied_bins;
   double *tmp_read;
 
-  CPU_RAM_Layout(unsigned int n_frames, size_t cpu_n_bytes,
-                 char *cpu_ram_start, unsigned int gpu_dofs_per_block,
+  CPU_RAM_Layout(unsigned int n_frames, size_t cpu_n_bytes, unsigned int gpu_dofs_per_block,
                  unsigned int n_dihedrals) {
     unsigned int n_dofs_total = 3 * (n_dihedrals + 1);
     unsigned int n_bonds = n_dihedrals + 2;
     unsigned int n_angles = n_dihedrals + 1;
     // calculate the maximum number of dofs (for one of the two dof_blocks) so
     // that everything still fits into CPU RAM
+                 
     dofs_per_block =
         (unsigned int)((cpu_n_bytes -
                         n_dofs_total * ((n_dofs_total + 3) * sizeof(PRECISION) +
@@ -433,6 +436,12 @@ public:
       dofs_per_block = n_dofs_total / 2;
       dofs_per_block += n_dofs_total % 2; //TODO: In this case, only load the trajectory once
     }
+    
+    cpu_n_bytes = sizeof(PRECISION) * (2 * dofs_per_block * n_frames + 3 * n_dofs_total + n_dofs_total * (n_dofs_total - 1) / 2 + 2 * (2 * gpu_dofs_per_block - 1) * gpu_dofs_per_block);
+    
+    cpu_ram_start = new char[cpu_n_bytes];
+    cpu_ram_end = cpu_ram_start + cpu_n_bytes - 1;
+    this->cpu_n_bytes = cpu_n_bytes;
 
     // set the pointers for partitioning the CPU RAM according to the calculated
     // dofs_per_block
@@ -467,9 +476,7 @@ public:
 
 class RAM {
 public:
-  char *cpu_ram_start;
-  char *cpu_ram_end;
-  size_t cpu_n_bytes;
+  
   char *gpu_ram_start;
   char *gpu_ram_end;
   size_t gpu_n_bytes;
@@ -481,9 +488,7 @@ public:
 
   RAM(size_t cpu_n_bytes, size_t gpu_n_bytes,
       Bat *bat, unsigned int n_bins) {
-    cpu_ram_start = new char[cpu_n_bytes];
-    cpu_ram_end = cpu_ram_start + cpu_n_bytes - 1;
-    this->cpu_n_bytes = cpu_n_bytes;
+    
     gpuErrchk(cudaMalloc((void **)&gpu_ram_start, gpu_n_bytes));
     gpu_ram_end = gpu_ram_start + gpu_n_bytes - 1;
     this->gpu_n_bytes = gpu_n_bytes;
@@ -492,8 +497,7 @@ public:
     this->n_dihedrals = bat->get_n_dihedrals();
     this->n_dofs_total = 3 * (n_dihedrals + 1);
     cpu_ram_layout =
-        new CPU_RAM_Layout(bat->get_n_frames(), cpu_n_bytes, cpu_ram_start,
-                           gpu_ram_layout->dofs_per_block, n_dihedrals);
+        new CPU_RAM_Layout(bat->get_n_frames(), cpu_n_bytes, gpu_ram_layout->dofs_per_block, n_dihedrals);
     for (unsigned int i = 0; i < n_dofs_total;
          i += cpu_ram_layout->dofs_per_block) {
       unsigned int end_g = i + cpu_ram_layout->dofs_per_block - 1;
@@ -961,8 +965,8 @@ int main(int argc, char *argv[]) {
   vector<string> atomNames;
   vector<string> belongsToMolecule;
 
-  if (argc != 7) {
-    cerr << "USAGE: " << argv[0] << " -f input.[g]bat -o entropy.par -b #bins\n";
+  if (argc != 11) {
+    cerr << "USAGE: " << argv[0] << " -f input.[g]bat -o entropy.par -b #bins --cpu_ram #GiB --gpu_ram #GiB\n";
     exit(EXIT_FAILURE);
   }
 
@@ -971,7 +975,7 @@ int main(int argc, char *argv[]) {
       !arg_parser.cmd_option_exists("-o") ||
       !arg_parser.cmd_option_exists("-b")) {
     // check for correct command line options
-    cerr << "USAGE: " << argv[0] << " -f input.[g]bat -o entropy.par -b #bins\n";
+    cerr << "USAGE: " << argv[0] << " -f input.[g]bat -o entropy.par -b #bins --cpu_ram #GiB --gpu_ram #GiB\n";
     exit(EXIT_FAILURE);
   }
 
@@ -982,7 +986,7 @@ int main(int argc, char *argv[]) {
       strcmp(arg_parser.get_extension(arg_parser.get_cmd_option("-o")),
              "par")) {
     // check for the extensions of the input and output file
-    cerr << "USAGE: " << argv[0] << " -f input.[g]bat -o entropy.par -b #bins\n";
+    cerr << "USAGE: " << argv[0] << " -f input.[g]bat -o entropy.par -b #bins --cpu_ram #GiB --gpu_ram #GiB\n";
     exit(EXIT_FAILURE);
   }
   if (sscanf(arg_parser.get_cmd_option("-b"), "%ud", &n_bins) != 1) {
@@ -992,10 +996,16 @@ int main(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
   }
 
-  size_t cpu_ram_available =
-      static_cast<size_t>(1024) * 1024 * 1024 * 58; //TODO: check avalable--------------------------------------------------
-  size_t gpu_ram_available =
-      static_cast<size_t>(1024) * 1024 * 1024 * 7.5; //TODO: check avalable--------------------------------------------------
+  stringstream cpu_ram_str(arg_parser.get_cmd_option("--cpu_ram"));
+  double cpu_ram_provided;
+  cpu_ram_str >> cpu_ram_provided;
+  size_t cpu_ram_available = static_cast<size_t>(1024) * 1024 * 1024 * cpu_ram_provided;
+  
+  stringstream gpu_ram_str(arg_parser.get_cmd_option("--gpu_ram"));
+  double gpu_ram_provided;
+  gpu_ram_str >> gpu_ram_provided;
+  size_t gpu_ram_available = static_cast<size_t>(1024) * 1024 * 1024 * gpu_ram_provided;
+
 
   PARENT_GPU parent_gpu(cpu_ram_available, gpu_ram_available,
                         arg_parser.get_cmd_option("-f"), n_bins,
