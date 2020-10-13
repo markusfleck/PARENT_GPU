@@ -420,7 +420,6 @@ public:
   PRECISION *maxima;
   PRECISION *tmp_result_entropy;
   unsigned int *tmp_result_occupied_bins;
-  double *tmp_read;
 
   CPU_RAM_Layout(unsigned int n_frames, size_t cpu_n_bytes, unsigned int gpu_dofs_per_block,
                  unsigned int n_dihedrals) {
@@ -430,13 +429,13 @@ public:
     // calculate the maximum number of dofs (for one of the two dof_blocks) so
     // that everything still fits into CPU RAM
                  
-    dofs_per_block =
-        (unsigned int)((cpu_n_bytes -
-                        n_dofs_total * ((n_dofs_total + 3) * sizeof(PRECISION) +
-                                        sizeof(double)) +
-                        (2 * gpu_dofs_per_block - 1) * gpu_dofs_per_block *
-                            (sizeof(PRECISION) + sizeof(unsigned int))) /
-                       (2 * n_frames * sizeof(PRECISION)));
+    //~ dofs_per_block =
+        //~ (unsigned int)((cpu_n_bytes - n_dofs_total * ((n_dofs_total + 3) * sizeof(PRECISION) + sizeof(double)) + (2 * gpu_dofs_per_block - 1) * gpu_dofs_per_block * (sizeof(PRECISION) + sizeof(unsigned int))) / (2 * n_frames * sizeof(PRECISION)));
+                 
+    dofs_per_block = (cpu_n_bytes - gpu_dofs_per_block * gpu_dofs_per_block) / sizeof(PRECISION);
+    dofs_per_block -= 3 * n_dofs_total + n_dofs_total * ( n_dofs_total - 1 ) / 2;
+    dofs_per_block /= 2 * n_frames;             
+                 
     if (dofs_per_block < gpu_dofs_per_block) {
       cerr << "WARNING: You probably have a GPU with a lot of RAM but your CPU "
               "RAM is rather small. ";
@@ -451,7 +450,7 @@ public:
       dofs_per_block += n_dofs_total % 2; //TODO: In this case, only load the trajectory once
     }
     
-    cpu_n_bytes = (static_cast<size_t>(2) * dofs_per_block * n_frames + 3 * n_dofs_total + n_dofs_total * (n_dofs_total - 1) / 2 + 2 * (2 * gpu_dofs_per_block - 1) * gpu_dofs_per_block) * sizeof(PRECISION);
+    cpu_n_bytes = (static_cast<size_t>(2) * dofs_per_block * n_frames + 3 * n_dofs_total + n_dofs_total * (n_dofs_total - 1) / 2) * sizeof(PRECISION) + gpu_dofs_per_block * gpu_dofs_per_block * ( sizeof(PRECISION) + sizeof(unsigned int) );
     
     cpu_ram_start = new char[cpu_n_bytes];
     this->cpu_n_bytes = cpu_n_bytes;
@@ -480,10 +479,8 @@ public:
     maxima = extrema + n_dofs_total;
     tmp_result_entropy = maxima + n_dofs_total;
     tmp_result_occupied_bins =
-        (unsigned int *)(tmp_result_entropy +
-                         (2 * gpu_dofs_per_block - 1) * gpu_dofs_per_block);
-    tmp_read = (double *)(tmp_result_occupied_bins +
-                          (2 * gpu_dofs_per_block - 1) * gpu_dofs_per_block);
+        (unsigned int *)(tmp_result_entropy + gpu_dofs_per_block * gpu_dofs_per_block);
+
   }
 };
 
@@ -778,7 +775,7 @@ public:
                          cudaMemcpyDeviceToHost));
     gpuErrchk(cudaMemcpy(ram->cpu_ram_layout->tmp_result_occupied_bins,
                          ram->gpu_ram_layout->occupied_bins,
-                         block1->n_dofs * block2->n_dofs * sizeof(PRECISION),
+                         block1->n_dofs * block2->n_dofs * sizeof(unsigned int),
                          cudaMemcpyDeviceToHost));
     
 
@@ -915,7 +912,7 @@ public:
                          cudaMemcpyDeviceToHost));
     gpuErrchk(cudaMemcpy(ram->cpu_ram_layout->tmp_result_occupied_bins,
                          ram->gpu_ram_layout->occupied_bins,
-                         block->n_dofs * block->n_dofs * sizeof(PRECISION),
+                         block->n_dofs * block->n_dofs * sizeof(unsigned int),
                          cudaMemcpyDeviceToHost));
     
 
