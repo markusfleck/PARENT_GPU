@@ -16,6 +16,7 @@
 #include <sys/time.h>
 #include <vector>
 
+#include "../util/util.h"
 #include "../util/io/io.h"
 #include "../util/types.h"
 
@@ -24,15 +25,7 @@
 // TODO: proper inclusion
 #include "PARENT_GPU_kernels.cu"
 
-#define gpuErrchk(ans)                                                         \
-  { gpuAssert((ans), __FILE__, __LINE__); }
-inline void gpuAssert(cudaError_t return_code, const char *file, int line) {
-  if (return_code != cudaSuccess) {
-    fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(return_code),
-            file, line);
-    exit(return_code);
-  }
-}
+
 
 using namespace std;
 
@@ -972,48 +965,48 @@ int main(int argc, char *argv[]) {
   }
 
   Arg_Parser arg_parser(argc, argv);
-  if (!arg_parser.cmd_option_exists("-f") ||
-      !arg_parser.cmd_option_exists("-o") ||
-      !arg_parser.cmd_option_exists("-b")) {
+  if (!arg_parser.exists("-f") ||
+      !arg_parser.exists("-o") ||
+      !arg_parser.exists("-b")) {
     // check for correct command line options
     cerr << "USAGE: " << argv[0] << " -f input.[g]bat -o entropy.par -b #bins --cpu_ram #GiB --gpu_ram #GiB\n";
     exit(EXIT_FAILURE);
   }
 
-  if ((strcmp(arg_parser.get_extension(arg_parser.get_cmd_option("-f")),
+  if ((strcmp(arg_parser.get_ext(arg_parser.get("-f")),
              "bat")
-        && strcmp(arg_parser.get_extension(arg_parser.get_cmd_option("-f")),
+        && strcmp(arg_parser.get_ext(arg_parser.get("-f")),
              "gbat"))||
-      strcmp(arg_parser.get_extension(arg_parser.get_cmd_option("-o")),
+      strcmp(arg_parser.get_ext(arg_parser.get("-o")),
              "par")) {
     // check for the extensions of the input and output file
     cerr << "USAGE: " << argv[0] << " -f input.[g]bat -o entropy.par -b #bins --cpu_ram #GiB --gpu_ram #GiB\n";
     exit(EXIT_FAILURE);
   }
-  if (sscanf(arg_parser.get_cmd_option("-b"), "%ud", &n_bins) != 1) {
+  if (sscanf(arg_parser.get("-b"), "%ud", &n_bins) != 1) {
     // read the number of bins and check for correctness
     cerr << "ERROR: Could not read number of bins from command line! Aborting"
          << endl;
     exit(EXIT_FAILURE);
   }
 
-  stringstream cpu_ram_str(arg_parser.get_cmd_option("--cpu_ram"));
+  stringstream cpu_ram_str(arg_parser.get("--cpu_ram"));
   double cpu_ram_provided;
   cpu_ram_str >> cpu_ram_provided;
   size_t cpu_ram_available = static_cast<size_t>(1024) * 1024 * 1024 * cpu_ram_provided;
   
-  stringstream gpu_ram_str(arg_parser.get_cmd_option("--gpu_ram"));
+  stringstream gpu_ram_str(arg_parser.get("--gpu_ram"));
   double gpu_ram_provided;
   gpu_ram_str >> gpu_ram_provided;
   size_t gpu_ram_available = static_cast<size_t>(1024) * 1024 * 1024 * gpu_ram_provided;
 
 
   PARENT_GPU parent_gpu(cpu_ram_available, gpu_ram_available,
-                        arg_parser.get_cmd_option("-f"), n_bins,
+                        arg_parser.get("-f"), n_bins,
                         threads_per_block);
   parent_gpu.calculate_entropy();
   cout << "Writing .par file." << endl;
-  parent_gpu.ent_mat->write(getCmdOption(argv, argv + argc, "-o"));
+  parent_gpu.ent_mat->write(arg_parser.get("-o"));
   cout << ".par file written." << endl;
 
   gettimeofday(&tv_end, NULL);

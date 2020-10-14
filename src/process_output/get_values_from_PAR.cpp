@@ -58,13 +58,15 @@ int main(int argc, char *argv[]) {
 
   bool longOutput;
   char *inputFilename;
+  
+  Arg_Parser arg_parser(argc, argv);
 
-  if ((argc == 3) && (cmdOptionExists(argv, argv + argc, "-p"))) {
-    inputFilename = getCmdOption(argv, argv + argc, "-p");
+  if ((argc == 3) && (arg_parser.exists("-p"))) {
+    inputFilename = arg_parser.get("-p");
     longOutput = true;
-  } else if ((argc == 4) && cmdOptionExists(argv, argv + argc, "-p") &&
-             cmdOptionExists(argv, argv + argc, "--short")) {
-    inputFilename = getCmdOption(argv, argv + argc, "-p");
+  } else if ((argc == 4) && arg_parser.exists("-p") &&
+             arg_parser.exists("--short")) {
+    inputFilename = arg_parser.get("-p");
     longOutput = false;
   } else {
     cerr << "USAGE:\n" << argv[0] << " -p input.par [--short]" << endl;

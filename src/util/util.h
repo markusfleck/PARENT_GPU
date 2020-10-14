@@ -28,14 +28,25 @@
 #include "types.h"
 #include <string>
 
+
+#ifdef __CUDACC__
+    #define gpuErrchk(ans)                                                         \
+      { gpuAssert((ans), __FILE__, __LINE__); }
+    inline void gpuAssert(cudaError_t return_code, const char *file, int line) {
+      if (return_code != cudaSuccess) {
+        fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(return_code),
+                file, line);
+        exit(return_code);
+      }
+    }
+#endif
+
 struct Dof {
     unsigned char type;
     unsigned int id;
 
 };
 
-char *getCmdOption(char **begin, char **end, const std::string &option);
-bool cmdOptionExists(char **begin, char **end, const std::string &option);
 unsigned char get_dof_type_from_id(unsigned int dof_id,
                                    unsigned int n_dihedrals);
 unsigned int get_min_id_for_type(unsigned char type, unsigned int n_dihedrals);

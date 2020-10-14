@@ -11,11 +11,6 @@
 
 using namespace std;
 
-struct Dof {
-    unsigned char type;
-    unsigned int id;
-
-};
 
 struct Dof_Pair{
     Dof dof1;
@@ -40,16 +35,16 @@ int main(int argc, char *argv[]){
     }
 
     Arg_Parser arg_parser(argc, argv);
-    if (!arg_parser.cmd_option_exists("-f") ||
-        !arg_parser.cmd_option_exists("-o")) {
+    if (!arg_parser.exists("-f") ||
+        !arg_parser.exists("-o")) {
         // check for correct command line options
         cerr << "USAGE: " << argv[0] << " -f input.par -o output.par\n";
         exit(EXIT_FAILURE);
     }
 
-    if (strcmp(arg_parser.get_extension(arg_parser.get_cmd_option("-f")),
+    if (strcmp(arg_parser.get_ext(arg_parser.get("-f")),
              "par") ||
-      strcmp(arg_parser.get_extension(arg_parser.get_cmd_option("-o")),
+      strcmp(arg_parser.get_ext(arg_parser.get("-o")),
              "par")) {
     // check for the extensions of the input and output file
     cerr << "USAGE: " << argv[0] << " -f input.par -o output.par\n";
@@ -57,7 +52,7 @@ int main(int argc, char *argv[]){
     }
 
     try {
-        Entropy_Matrix ent_mat(arg_parser.get_cmd_option("-f"));
+        Entropy_Matrix ent_mat(arg_parser.get("-f"));
         unsigned int n_bonds = ent_mat.getNBonds();
         unsigned int n_angles = ent_mat.getNAngles();
         unsigned int n_dihedrals = ent_mat.getNDihedrals();
@@ -156,7 +151,7 @@ int main(int argc, char *argv[]){
             ent_mat.setMutual(mi_mist[i].dof1.type, mi_mist[i].dof2.type, mi_mist[i].dof1.id, mi_mist[i].dof2.id, mi_mist[i].value);
         }
 
-        ent_mat.write(arg_parser.get_cmd_option("-o"));
+        ent_mat.write(arg_parser.get("-o"));
         
         gettimeofday(&tv_end, NULL);
         cout << endl << endl;

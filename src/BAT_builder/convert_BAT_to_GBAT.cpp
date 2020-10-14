@@ -16,27 +16,27 @@ int main(int argc, char *argv[]) {
       }
 
       Arg_Parser arg_parser(argc, argv);
-      if (!arg_parser.cmd_option_exists("-f") ||
-          !arg_parser.cmd_option_exists("-o")) {
+      if (!arg_parser.exists("-f") ||
+          !arg_parser.exists("-o")) {
         // check for correct command line options
         cerr << "USAGE: " << argv[0] << " -f input.bat -o ouput.gbat --ram #GiB\n";
         exit(EXIT_FAILURE);
       }
 
-      if (strcmp(arg_parser.get_extension(arg_parser.get_cmd_option("-f")),
+      if (strcmp(arg_parser.get_ext(arg_parser.get("-f")),
                  "bat") ||
-          strcmp(arg_parser.get_extension(arg_parser.get_cmd_option("-o")),
+          strcmp(arg_parser.get_ext(arg_parser.get("-o")),
                  "gbat")) {
         // check for the extensions of the input and output file
         cerr << "USAGE: " << argv[0] << " -f input.bat -o ouput.gbat --ram #GiB\n";
         exit(EXIT_FAILURE);
       }
       
-      Bat bat(arg_parser.get_cmd_option("-f"));
-      cout<<"Converting "<<arg_parser.get_cmd_option("-f")<< " to GBAT."<<endl;
-      //~ bat.write_GBAT(arg_parser.get_cmd_option("-o"));
+      Bat bat(arg_parser.get("-f"));
+      cout<<"Converting "<<arg_parser.get("-f")<< " to GBAT."<<endl;
+      //~ bat.write_GBAT(arg_parser.get("-o"));
       
-      bat.write_BAT_header(arg_parser.get_cmd_option("-o"), 4);
+      bat.write_BAT_header(arg_parser.get("-o"), 4);
       
       unsigned int inc = (bat.get_precision() == 0) ? sizeof(float) : sizeof(double);
       size_t n_frames = bat.get_n_frames();
@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
       unsigned int n_dofs = bat.get_n_dofs();
       unsigned int n_dihedrals = bat.get_n_dihedrals();
       
-      stringstream ram_str(arg_parser.get_cmd_option("--ram"));
+      stringstream ram_str(arg_parser.get("--ram"));
       double ram_provided;
       ram_str >> ram_provided;
       size_t cpu_ram_available = static_cast<size_t>(1024) * 1024 * 1024 * ram_provided;
@@ -78,7 +78,7 @@ int main(int argc, char *argv[]) {
       }
       else{
             My_Error my_error((string("ERROR WHILE READING BAT ") +
-                       arg_parser.get_cmd_option("-f") + string("! UNKNOWN PRECISION. ABORTING."))
+                       arg_parser.get("-f") + string("! UNKNOWN PRECISION. ABORTING."))
                           .c_str());
             throw my_error;
       }
