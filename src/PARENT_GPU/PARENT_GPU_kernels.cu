@@ -46,7 +46,7 @@ __global__ void histo2D_shared_block(PRECISION* __restrict__ traj1, PRECISION* _
     }
     
   while (idx < numFrames) {
-    atomicAdd(&histo[int((traj1[idx] - min1) / binSize1) * n_bins +
+    atomicAdd(&histo_block[int((traj1[idx] - min1) / binSize1) * n_bins +
                      int((traj2[idx] - min2) / binSize2)],
               1);
     idx += offset;
