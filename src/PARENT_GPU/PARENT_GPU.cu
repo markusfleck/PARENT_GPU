@@ -1,11 +1,15 @@
 #define PRECISION double
+#define PRECISION2 double2
+#define PRECISION4 double4
+
+
 #define MODFITNBINS 100
 #define WARPMULTIPLES 1
 #define MEMORY_USAGE 0.8 // GPU
 #define RAM_USAGE 0.8    // CPU
 #define DEBUG false
 #define N_STREAMS 32
-#define HISTOGRAM_THREAD_WORK_MULTIPLE 16
+#define HISTOGRAM_THREAD_WORK_MULTIPLE 8
 #define HISTOGRAM_THREADS 512
 #define USE_SHARED_MEM_HISTOGRAMS
 
@@ -80,6 +84,7 @@ public:
   unsigned int n_dihedrals;
   unsigned int gpu_dofs_per_block;
   unsigned int n_frames;
+  unsigned int n_frames_padded;
   unsigned char precision_traj;
   vector<GPU_RAM_Block> blocks;
   PRECISION *block_start;
@@ -105,6 +110,7 @@ public:
     this->n_dihedrals = bat->get_n_dihedrals();
     this->gpu_dofs_per_block = gpu_dofs_per_block;
     this->n_frames = bat->get_n_frames();
+    this->n_frames_padded = bat->get_n_frames_padded(4);
     this->precision_traj = bat->get_precision();
     this->minima = minima;
     this->maxima = maxima;
@@ -137,14 +143,14 @@ public:
 
     this->block_start = block_start;
     type_addr[TYPE_B] = block_start;
-    type_addr[TYPE_A] = block_start + type_n_dofs[TYPE_B] * n_frames;
+    type_addr[TYPE_A] = block_start + type_n_dofs[TYPE_B] * n_frames_padded;
     type_addr[TYPE_D] =
-        block_start + (type_n_dofs[TYPE_B] + type_n_dofs[TYPE_A]) * n_frames;
+        block_start + (type_n_dofs[TYPE_B] + type_n_dofs[TYPE_A]) * n_frames_padded;
     bonds = type_addr[TYPE_B];
     angles = type_addr[TYPE_A];
     dihedrals = type_addr[TYPE_D];
 
-    bat->load_dofs(type_addr, type_id_start, type_id_end);
+    bat->load_dofs(type_addr, type_id_start, type_id_end, 4);
 
     modfit_dihedrals();
     if (!extrema_calculated) {
@@ -164,9 +170,9 @@ public:
         if (int(block_id_end) > type_id_end[type])
           block_id_end = type_id_end[type];
         PRECISION *cpu_ram_start =
-            block_start + (block_id_start - dof_id_start_g) * n_frames;
+            block_start + (block_id_start - dof_id_start_g) * n_frames_padded;
         blocks.push_back(*new GPU_RAM_Block(cpu_ram_start, block_id_start,
-                                            block_id_end, n_frames,
+                                            block_id_end, n_frames_padded,
                                             n_dihedrals));
       }
     }
@@ -196,7 +202,7 @@ public:
                    5e-9 * (sizeof(PRECISION) == sizeof(float) ? 100000 : 1)) /
                   MODFITNBINS;
         for (unsigned int i = 0; i < n_frames; i++)
-          histo[int((dihedrals[j * n_frames + i]) / binsize)] += 1;
+          histo[int((dihedrals[j * n_frames_padded + i]) / binsize)] += 1;
 
         zeroExists = false;
         for (int k = 0; k < MODFITNBINS; k++)
@@ -244,10 +250,10 @@ public:
                               binsize; // calculate the shift to put the zero
                                        // stretch to the 2pi end
         for (unsigned int k = 0; k < n_frames; k++) {
-          dihedrals[j * n_frames + k] =
-              dihedrals[j * n_frames + k] + modFit -
+          dihedrals[j * n_frames_padded + k] =
+              dihedrals[j * n_frames_padded + k] + modFit -
               2 * pi *
-                  int((dihedrals[j * n_frames + k] + modFit) /
+                  int((dihedrals[j * n_frames_padded + k] + modFit) /
                       (2 * pi)); // and apply it taking care of circularity
         }
       }
@@ -261,14 +267,14 @@ public:
 
 #pragma omp for
       for (unsigned int j = 0; j < n_dofs; j++) { // for all dofs
-        tmpMax = block_start[j * n_frames];
-        tmpMin = block_start[j * n_frames];
+        tmpMax = block_start[j * n_frames_padded];
+        tmpMin = block_start[j * n_frames_padded];
         for (unsigned int i = 1; i < n_frames; i++) { // and all frames
-          if (block_start[j * n_frames + i] > tmpMax) {
-            tmpMax = block_start[j * n_frames + i];
+          if (block_start[j * n_frames_padded + i] > tmpMax) {
+            tmpMax = block_start[j * n_frames_padded + i];
           }
-          if (block_start[j * n_frames + i] < tmpMin) {
-            tmpMin = block_start[j * n_frames +
+          if (block_start[j * n_frames_padded + i] < tmpMin) {
+            tmpMin = block_start[j * n_frames_padded +
                                  i]; // find the maximum and minmum values
           }
         }
@@ -310,7 +316,7 @@ public:
         for (unsigned int i = 0; i < n_frames;
              i++) { // and fill the histogram using all frames of the trajectory
           histo[int(
-              (block_start[(j - dof_id_start_g) * n_frames + i] - minima[j]) /
+              (block_start[(j - dof_id_start_g) * n_frames_padded + i] - minima[j]) /
               binsize)] += 1;
         }
         occupbins = 0; // then use the histogram to calculate the (discretized)
@@ -493,10 +499,10 @@ public:
     this->n_dihedrals = bat->get_n_dihedrals();
     this->n_dofs_total = 3 * (n_dihedrals + 1);
 
-    gpu_ram_layout = new GPU_RAM_Layout(bat->get_n_frames(), n_bins,
+    gpu_ram_layout = new GPU_RAM_Layout(bat->get_n_frames_padded(4), n_bins,
                                         gpu_n_bytes, n_dofs_total);
     cpu_ram_layout =
-        new CPU_RAM_Layout(bat->get_n_frames(), cpu_n_bytes, gpu_ram_layout->dofs_per_block, n_dihedrals);
+        new CPU_RAM_Layout(bat->get_n_frames_padded(4), cpu_n_bytes, gpu_ram_layout->dofs_per_block, n_dihedrals);
     for (unsigned int i = 0; i < n_dofs_total;
          i += cpu_ram_layout->dofs_per_block) {
       unsigned int end_g = i + cpu_ram_layout->dofs_per_block - 1;
@@ -515,6 +521,7 @@ public:
   int threads_per_block;
   unsigned int n_bins;
   unsigned int n_frames;
+  unsigned int n_frames_padded;
   Entropy_Matrix *ent_mat;
   unsigned int n_dihedrals;
   Bat *bat;
@@ -529,6 +536,7 @@ public:
     bat = new Bat(bat_str);
 
     this->n_frames = bat->get_n_frames();
+    this->n_frames_padded = bat->get_n_frames_padded(4);
     this->n_dihedrals = bat->get_n_dihedrals();
 
     ram = new RAM(cpu_n_bytes, gpu_n_bytes, bat, n_bins);
@@ -685,8 +693,8 @@ public:
         #else
         histo2D<<<blocks, threads_per_block, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(
         #endif
-            block1->gpu_ram_start + i * n_frames,
-            block2->gpu_ram_start + j * n_frames, n_frames, histogram, n_bins,
+            block1->gpu_ram_start + i * n_frames_padded,
+            block2->gpu_ram_start + j * n_frames_padded, n_frames, histogram, n_bins,
             bin_size1, bin_size2, min1, min2);
         threads_per_block = threads_per_block_sav;
       }
@@ -822,8 +830,8 @@ public:
         #else
         histo2D<<<blocks, threads_per_block, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(
         #endif
-            block->gpu_ram_start + i * n_frames,
-            block->gpu_ram_start + j * n_frames, n_frames, histogram, n_bins,
+            block->gpu_ram_start + i * n_frames_padded,
+            block->gpu_ram_start + j * n_frames_padded, n_frames, histogram, n_bins,
             bin_size1, bin_size2, min1, min2);
         threads_per_block = threads_per_block_sav;
       }

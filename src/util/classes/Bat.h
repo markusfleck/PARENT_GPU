@@ -32,6 +32,7 @@ public:
     std::ifstream *get_infile();
     std::ofstream *get_outfile();
     int get_n_frames();
+    int get_n_frames_padded(unsigned int padding);
     int get_n_bonds();
     int get_n_angles();
     int get_n_dihedrals();
@@ -40,7 +41,7 @@ public:
     void set_precision(int precision);
     void write_GBAT(char const* outfile_str);
     void write_BAT_header(char const* outfile_str, int version);
-    template <class T> void load_dofs(T* type_addr[3], int type_id_start[3], int type_id_end[3]);
+    template <class T> void load_dofs(T* type_addr[3], int type_id_start[3], int type_id_end[3], unsigned int padding = 0);
     template <class T> void load_externals(float* tpd, T* externals);      
 
 private:

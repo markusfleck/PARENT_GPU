@@ -587,9 +587,13 @@ void Bat::write_GBAT(char const* outfile_str){ //slow conversion due to scattere
 
 
 template <class T>
-void Bat::load_dofs(T* type_addr[3], int type_id_start[3], int type_id_end[3]) {
+void Bat::load_dofs(T* type_addr[3], int type_id_start[3], int type_id_end[3], unsigned int padding) {
     try{
-        //~ cout<<"H0"<<endl;
+        if( (padding > 1) && (n_frames % padding > 0) ){
+            padding = padding - ( n_frames % padding );
+        }
+        else{ padding = 0;}
+        
         size_t inc;
         if (precision == 1) {
             inc = sizeof(double); // if trajectory is in double precision
@@ -640,7 +644,7 @@ void Bat::load_dofs(T* type_addr[3], int type_id_start[3], int type_id_end[3]) {
               //~ cout<<"H1"<<endl;
               if ((b_counter_g >= type_id_start[TYPE_B]) &&
                   (b_counter_g <= type_id_end[TYPE_B]))
-                bonds[b_counter_lt++ * n_frames + frame] = ddummy[0];
+                bonds[b_counter_lt++ * (n_frames + padding) + frame] = ddummy[0];
               b_counter_g++;
                 //~ cout<<"H2"<<endl;
               infile.read((char *)ddummy,
@@ -649,7 +653,7 @@ void Bat::load_dofs(T* type_addr[3], int type_id_start[3], int type_id_end[3]) {
               
               if ((b_counter_g >= type_id_start[TYPE_B]) &&
                   (b_counter_g <= type_id_end[TYPE_B]))
-                bonds[b_counter_lt++ * n_frames + frame] = ddummy[0];
+                bonds[b_counter_lt++ * (n_frames + padding) + frame] = ddummy[0];
               b_counter_g++;
                 //~ cout<<"H3"<<endl;
               infile.read((char *)ddummy, inc); // and the angle between the two
@@ -657,7 +661,7 @@ void Bat::load_dofs(T* type_addr[3], int type_id_start[3], int type_id_end[3]) {
               
               if ((a_counter_g >= type_id_start[TYPE_A]) &&
                   (a_counter_g <= type_id_end[TYPE_A]))
-                angles[a_counter_lt++ * n_frames + frame] = ddummy[0];
+                angles[a_counter_lt++ * (n_frames + padding) + frame] = ddummy[0];
               a_counter_g++;
                 //~ cout<<"H4"<<endl;
               for (int i = 0; i < n_dihedrals;
@@ -668,7 +672,7 @@ void Bat::load_dofs(T* type_addr[3], int type_id_start[3], int type_id_end[3]) {
                 
                 if ((b_counter_g >= type_id_start[TYPE_B]) &&
                     (b_counter_g <= type_id_end[TYPE_B]))
-                        bonds[b_counter_lt++ * n_frames + frame] = ddummy[0];
+                        bonds[b_counter_lt++ * (n_frames + padding) + frame] = ddummy[0];
                 b_counter_g++;
                 //~ cout<<"H41"<<endl;
 
@@ -677,7 +681,7 @@ void Bat::load_dofs(T* type_addr[3], int type_id_start[3], int type_id_end[3]) {
                 
                 if ((a_counter_g >= type_id_start[TYPE_A]) &&
                     (a_counter_g <= type_id_end[TYPE_A]))
-                  angles[a_counter_lt++ * n_frames + frame] = ddummy[0];
+                  angles[a_counter_lt++ * (n_frames + padding) + frame] = ddummy[0];
                 a_counter_g++;
                 //~ cout<<"H42"<<endl;
 
@@ -685,19 +689,36 @@ void Bat::load_dofs(T* type_addr[3], int type_id_start[3], int type_id_end[3]) {
                 
                 if ((d_counter_g >= type_id_start[TYPE_D]) &&
                     (d_counter_g <= type_id_end[TYPE_D]))
-                  dihedrals[d_counter_lt++ * n_frames + frame] = ddummy[0];
+                  dihedrals[d_counter_lt++ * (n_frames + padding) + frame] = ddummy[0];
                 d_counter_g++;
                 //~ cout<<"H43"<<endl;
               }
               //~ cout<<"H5"<<endl;
             }
+            if (padding > 0){
+                for(unsigned int type = 0; type < 3; type++){
+                    for(int i = 0; i < (type_id_end[type] - type_id_start[type] + 1) ; i++) memset(&type_addr[type][ i * (n_frames + padding) + n_frames], 0.0, padding);
+                }
+            }
         }
         else if(version == 4){
-            
-            for(unsigned int type = 0; type < 3; type++){
-                if ( (type_id_start[type] >= 0) && (type_id_end[type] >= 0) ){
-                    infile.seekg(size_t(dofs_begin) + n_frames * (11 * sizeof(float) + (6 + type_id_start[type]) * inc) );
-                    infile.read((char *)type_addr[type], size_t(n_frames) * (type_id_end[type] - type_id_start[type] + 1) * inc);
+            if(padding>0){
+                for(unsigned int type = 0; type < 3; type++){
+                    if ( (type_id_start[type] >= 0) && (type_id_end[type] >= 0) ){
+                        infile.seekg(size_t(dofs_begin) + n_frames * (11 * sizeof(float) + (6 + type_id_start[type]) * inc) );
+                        for(int i = 0; i < (type_id_end[type] - type_id_start[type] + 1) ; i++){
+                            infile.read((char *)(type_addr[type] + i * (n_frames + padding)), size_t(n_frames) * inc);
+                            memset(&type_addr[type][ i * (n_frames + padding) + n_frames], 0.0, padding);
+                        }
+                    }
+                }
+            }
+            else{
+                for(unsigned int type = 0; type < 3; type++){
+                    if ( (type_id_start[type] >= 0) && (type_id_end[type] >= 0) ){
+                        infile.seekg(size_t(dofs_begin) + n_frames * (11 * sizeof(float) + (6 + type_id_start[type]) * inc) );
+                        infile.read((char *)type_addr[type], size_t(n_frames) * (type_id_end[type] - type_id_start[type] + 1) * inc);
+                    }
                 }
             }
         
@@ -718,8 +739,8 @@ void Bat::load_dofs(T* type_addr[3], int type_id_start[3], int type_id_end[3]) {
     }
   }
 
-template void Bat::load_dofs(float* type_addr[3], int type_id_start[3], int type_id_end[3]);
-template void Bat::load_dofs(double* type_addr[3], int type_id_start[3], int type_id_end[3]);
+template void Bat::load_dofs(float* type_addr[3], int type_id_start[3], int type_id_end[3], unsigned int padding);
+template void Bat::load_dofs(double* type_addr[3], int type_id_start[3], int type_id_end[3], unsigned int padding);
   
 
 template <class T>  
@@ -799,6 +820,15 @@ ifstream *Bat::get_infile() { infile.seekg(dofs_begin); return &infile; }
 ofstream *Bat::get_outfile() { outfile.seekp(dofs_begin); return &outfile; }
 
 int Bat::get_n_frames() { return n_frames; }
+int Bat::get_n_frames_padded(unsigned int padding) { 
+    
+    unsigned int full = n_frames / padding;
+    full *= padding;
+    if(n_frames - full > 0){
+        return full + padding;
+    }
+    return n_frames; 
+}
 
 int Bat::get_n_bonds() { return n_bonds; }
 int Bat::get_n_angles() { return n_angles; }

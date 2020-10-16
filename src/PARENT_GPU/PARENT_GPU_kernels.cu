@@ -28,6 +28,89 @@ __global__ void histo2D(PRECISION* __restrict__ traj1, PRECISION* __restrict__ t
   }
 }
 
+//~ __global__ void histo2D_shared_block(PRECISION* __restrict__ traj1, PRECISION* __restrict__ traj2, const int numFrames,
+                        //~ unsigned int* __restrict__ histo, const int n_bins,
+                        //~ PRECISION binSize1, PRECISION binSize2, PRECISION min1,
+                        //~ PRECISION min2) {
+                        
+    //~ extern __shared__ unsigned int histo_block[];
+
+  //~ int idx = threadIdx.x + blockIdx.x * blockDim.x;
+  //~ int offset = blockDim.x * gridDim.x;
+    //~ int tid = threadIdx.x;
+    //~ int n_bins_total = n_bins * n_bins;
+                        
+    //~ while(tid < n_bins_total){
+        //~ histo_block[tid] = 0;
+        //~ tid += blockDim.x;
+    //~ }
+    
+  //~ while (idx < numFrames) {
+    //~ atomicAdd(&histo_block[int((traj1[idx] - min1) / binSize1) * n_bins +
+                     //~ int((traj2[idx] - min2) / binSize2)],
+              //~ 1);
+    //~ idx += offset;
+  //~ }
+  
+  
+  //~ __syncthreads();
+  
+  //~ tid = threadIdx.x;
+  //~ while(tid < n_bins_total){
+    //~ atomicAdd(&(histo[tid]), histo_block[tid]);
+    //~ tid += blockDim.x;
+  //~ }
+  
+//~ }
+
+
+//~ __global__ void histo2D_shared_block(PRECISION* __restrict__ traj1, PRECISION* __restrict__ traj2, const int numFrames,
+                        //~ unsigned int* __restrict__ histo, const int n_bins,
+                        //~ PRECISION binSize1, PRECISION binSize2, PRECISION min1,
+                        //~ PRECISION min2) {
+                        
+    //~ extern __shared__ unsigned int histo_block[];
+
+  //~ int idx = threadIdx.x + blockIdx.x * blockDim.x;
+  //~ int offset = blockDim.x * gridDim.x;
+    //~ int tid = threadIdx.x;
+    //~ int n_bins_total = n_bins * n_bins;
+                        
+    //~ while(tid < n_bins_total){
+        //~ histo_block[tid] = 0;
+        //~ tid += blockDim.x;
+    //~ }
+    
+  //~ while (idx * 2 < numFrames - 1) {
+    //~ PRECISION2 traj_tmp1 = reinterpret_cast<PRECISION2*>(traj1)[idx];
+    //~ PRECISION2 traj_tmp2 = reinterpret_cast<PRECISION2*>(traj2)[idx];
+    
+    //~ atomicAdd(&histo_block[int((traj_tmp1.x - min1) / binSize1) * n_bins + int((traj_tmp2.x - min2) / binSize2)], 1);
+    //~ atomicAdd(&histo_block[int((traj_tmp1.y - min1) / binSize1) * n_bins + int((traj_tmp2.y - min2) / binSize2)], 1);
+    
+    //~ idx += offset;
+  //~ }
+
+  
+  //~ int leftover = numFrames - 2 *idx;
+  //~ while(leftover > 0){
+    //~ atomicAdd(&histo_block[int((traj1[numFrames - leftover] - min1) / binSize1) * n_bins + int((traj2[numFrames - leftover] - min2) / binSize2)], 1);
+    //~ leftover--;
+  //~ }
+  
+  
+  //~ __syncthreads();
+  
+  //~ tid = threadIdx.x;
+  //~ while(tid < n_bins_total){
+    //~ atomicAdd(&(histo[tid]), histo_block[tid]);
+    //~ tid += blockDim.x;
+  //~ }
+  
+//~ }
+
+
+
 __global__ void histo2D_shared_block(PRECISION* __restrict__ traj1, PRECISION* __restrict__ traj2, const int numFrames,
                         unsigned int* __restrict__ histo, const int n_bins,
                         PRECISION binSize1, PRECISION binSize2, PRECISION min1,
@@ -45,23 +128,37 @@ __global__ void histo2D_shared_block(PRECISION* __restrict__ traj1, PRECISION* _
         tid += blockDim.x;
     }
     
-  while (idx < numFrames) {
-    atomicAdd(&histo[int((traj1[idx] - min1) / binSize1) * n_bins +
-                     int((traj2[idx] - min2) / binSize2)],
-              1);
+  while (idx * 4 < numFrames - 3) {
+    PRECISION4 traj_tmp1 = reinterpret_cast<PRECISION4*>(traj1)[idx];
+    PRECISION4 traj_tmp2 = reinterpret_cast<PRECISION4*>(traj2)[idx];
+    
+    atomicAdd(&histo_block[int((traj_tmp1.x - min1) / binSize1) * n_bins + int((traj_tmp2.x - min2) / binSize2)], 1);
+    atomicAdd(&histo_block[int((traj_tmp1.y - min1) / binSize1) * n_bins + int((traj_tmp2.y - min2) / binSize2)], 1);
+    atomicAdd(&histo_block[int((traj_tmp1.z - min1) / binSize1) * n_bins + int((traj_tmp2.z - min2) / binSize2)], 1);
+    atomicAdd(&histo_block[int((traj_tmp1.w - min1) / binSize1) * n_bins + int((traj_tmp2.w - min2) / binSize2)], 1);
+    
     idx += offset;
+  }
+
+  
+  int leftover = numFrames - 4 *idx;
+  while(leftover > 0){
+    atomicAdd(&histo_block[int((traj1[numFrames - leftover] - min1) / binSize1) * n_bins + int((traj2[numFrames - leftover] - min2) / binSize2)], 1);
+    leftover--;
   }
   
   
   __syncthreads();
   
   tid = threadIdx.x;
-  while(tid < n_bins_total){
-    atomicAdd(&(histo[tid]), histo_block[tid]);
+  while(tid < n_bins_total / 2){
+    atomicAdd(&(reinterpret_cast<unsigned long long int*>(histo)[tid]), reinterpret_cast<unsigned long long int*>(histo_block)[tid]);
     tid += blockDim.x;
   }
   
 }
+
+
 
 __global__ void cu_baEnt(unsigned int *histo, const int numFrames,
                          const int bins1, const int bins2, PRECISION binSize1,
