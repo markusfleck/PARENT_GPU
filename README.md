@@ -2,7 +2,28 @@
 CUDA-enabled computation of biomolecular configurational entropy from molecular dynamics trajectories.
 <br />  
 <br />  
-<br />  
+<br /> 
+# General considerations
+This code has its roots in my PARENT repository, which features hybrid MPI/openMP architecture and is targeted at CPU clusters. PARENT_GPU
+was written to enable information-theoretical, expansion-based configurational entropy calculations on workstations. In particular this means that CPU
+RAM is not a limiting factor anymore, since PARENT_GPU is efficient in reloading from the hard disk. By making use of GPUs, the code is performant. Roughly 
+speaking, you can expect a single GPU to outperform a CPU cluster of ~150 cores (or more). The reason for this surprising performance is that the number of 
+calculations performed on the GPU essentially grows quadratically with the amount of data transferred, as 2D entropies are calculated for each possible pair of degrees of 
+freedom. In more intuitive words, GPUs are such beasts in raw computation that very often you have a hard time providing them with enough data to keep 
+them busy calculating. Therefore, doing calculations for every possible pair in the data you provide is a scenario where they really shine. 
+
+One of the strongest motivations for writing this code was the fact 
+that the calculated mutual information terms essentially form a distance matrix of interaction strengths inside molecules (or between molecules). Using these 
+terms for machine learning strongly suggests itself. In this context, stay tuned, I will release a first working use-case asap ...    
+
+# TODOs/Known Issues/Future plans
+- This code was extensively tested on my own system. Remember, however, that code matures with the feedback of its users.
+- more than 95% percent of the calculation time are spent during histogramming. Entropy calculations are quite special in this respect,
+as ~2500 bins are the usual scenario here, which greatly reduces atomicAdd penalties. Therfore, many standard optimization techniques have very limited effect. The one bottle-neck on consumer graphics cards is double precision performance. It might be possible to use fixed-point arithmetics for PARENT_GPU, circumventing
+the low double precision performance of consumer-grade GPUs.
+- currently, PARENT is a single-node, single-GPU program. In fact, parallelization across nodes/GPUs should be "relatively easy"
+- The Entropy_Matrix class should be wrapped into Python in order to make use its abundant machine learning libraries
+
 # 0) QUICK AND DIRTY <br />  
 Install the requirements. The program needs at least CUDA 9.0. Additionally, libgromacs-dev 
 needs to be installed to read the trajectories. E. g. on Debian/Ubuntu/Linux Mint issue
