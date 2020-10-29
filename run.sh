@@ -8,6 +8,7 @@ export OMP_NUM_THREADS=4 # Set the number of threads of your CPU.
 
 IN_NAME="test_system/UBQ_UBM2" # The name and location of your trajectory (.xtc) and topology (.top) files
 OUT_NAME="output/UBQ_UBM" # The name and location of the output
+NBINS=50 # The number of bins used for the discretization of the trajectory. The 2D entropy values use the square of this nuber as the number of bins
 
 # make clean # remember to recompile if you change machines (e. g. when using cloud computing services)
 make CUDA_ARCH=${CUDA_ARCH}
@@ -20,10 +21,10 @@ bin/BAT_builder -t ${IN_NAME}.top -x ${IN_NAME}.xtc -o ${OUT_NAME}.bat -bb "CA C
 bin/convert_BAT_to_GBAT -f ${OUT_NAME}.bat -o ${OUT_NAME}.gbat --ram $CPU_RAM # optionally, convert .bat to .gbat, tremendously enhancing harddisk reading times. Useful for large molecules/trajectories. 
 
 
-./bin/PARENT_GPU -f ${OUT_NAME}.gbat -o ${OUT_NAME}.par -b 50 --cpu_ram $CPU_RAM --gpu_ram $GPU_RAM && bin/get_values_from_PAR -p ${OUT_NAME}.par --short # run the MIE calculation, the heart of PARENT_GPU 
+./bin/PARENT_GPU -f ${OUT_NAME}.gbat -o ${OUT_NAME}.par -b $NBINS --cpu_ram $CPU_RAM --gpu_ram $GPU_RAM && bin/get_values_from_PAR -p ${OUT_NAME}.par --short | tee ${OUT_NAME}_MIE.txt # run the MIE calculation, the heart of PARENT_GPU 
 echo -e "\n\n\n"
 
-bin/MIST_GPU -f ${OUT_NAME}.par -o ${OUT_NAME}_MIST_GPU.par && bin/get_values_from_PAR -p ${OUT_NAME}_MIST_GPU.par --short # calculate the MIST approximation (in principle optional, but numerically mandatory)
+bin/MIST_GPU -f ${OUT_NAME}.par -o ${OUT_NAME}_MIST_GPU.par && bin/get_values_from_PAR -p ${OUT_NAME}_MIST_GPU.par --short | tee ${OUT_NAME}_MIST.txt # calculate the MIST approximation (in principle optional, but numerically mandatory)
 # echo -e "\n\n\n"; bin/MIST_openMP -f ${OUT_NAME}.par -o ${OUT_NAME}_MIST_openMP.par && bin/get_values_from_PAR -p ${OUT_NAME}_MIST_openMP.par --short # no need to run this line unless for some exotic reason you don't want to use your GPU to calculate the MIST approximation as done just above
 
 
