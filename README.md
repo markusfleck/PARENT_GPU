@@ -5,7 +5,7 @@ CUDA-enabled computation of biomolecular configurational entropy from molecular 
 <br />  
 # 0) QUICK AND DIRTY <br />  
 Install the requirements. The program needs at least CUDA 9.0. Additionally, libgromacs-dev 
-needs to be installed to read the trajectories. On Debian/Ubuntu/Linux Mint issue
+needs to be installed to read the trajectories. E. g. on Debian/Ubuntu/Linux Mint issue
 
     sudo apt install libgromacs-dev
 
@@ -17,10 +17,10 @@ first ten lines of run.sh. Then run
 
     bash run.sh
     
-inside your shell. The configurational entropy output using the MIST approximation 
-is contained in "output/{name_of_your_protein}.txt". 
+inside your shell. The configurational entropy output using the maximum information spanning tree (MIST) approximation 
+is contained in "output/{name_of_your_protein}_MIST.txt". 
 
-If you run the code for testing purposes without any modifications,
+If you run the code for testing purposes only without any modifications,
 the calculation should take something like 2-5 minutes. The resulting values at the end of the
 files should match those in "test_system/sample_output".
 
@@ -69,14 +69,14 @@ You are strongly encouraged to read the rest of this document, but at least the 
   The easiest way to do this is by just modifying the file "run.sh" in the top directory as described 
   chapter 0 as well as in run.sh by the comments:
   
-  The input files (GROMACS .top and .xtc) as well as the output should be specified either 
+  The input files (GROMACS .top and .xtc) as well as the output path/name should be specified either 
   relative to the top directory of the package or as an absolute path.
   
   The "OUT_NAME" parameter specifies the prefix of all output files. If you want to do multiple 
   calculations using the same output folder, you should change this parameter every time. Otherwise 
-  your previous results will be overwritten without warning.
+  your previous results will be overwritten without a warning.
   
-  The BINS parameter controls how many bins are used for building the histograms which sample the 
+  The NBINS parameter controls how many bins are used for building the histograms which sample the 
   probability densities of the degrees of freedom. For the 2D values (on which the mutual information terms are based), 
   the square of this value will be used for building the histograms. This means if you set NBINS=50, 2500 bins will be used for every 2D histogram.
   This parameter is used exclusively during the Mutual Information Expansion (MIE) calculations, performed 
@@ -106,7 +106,7 @@ especially the line
   	
     make clean; make CUDA_ARCH={cuda_capability_without_dot}
   
-  when you change computer architecture (e. g. heterogeneous cluster).
+  when you change computers (e. g. heterogeneous cluster).
   
 #  3) EXPLANATION OF THE PROGRAMS
   
@@ -162,16 +162,16 @@ isolation.
 ## 3.2) convert_BAT_to_GBAT
 This program was developed especially for the present GPU version of PARENT, i. e. PARENT_GPU. While the original version of PARENT was targeted for a CPU 
 cluster,
-PARENT_GPU is designed for workstations (and outperforms medium-sized CPU clusters with a modern consumer grade graphics card). This means that PARENT_GPU will 
+PARENT_GPU is designed for workstations (and roughly speaking outperforms <200 core CPU clusters with a modern consumer grade graphics card). This means that PARENT_GPU will 
 in many cases reload parts of the trajectory from the harddisk if the whole trajectory does not fit into CPU RAM. GROMACS trajectories are stored in a per-frame 
 fashion: for 
 every time step, the coordinates of the whole molecule are stored together, followed by the next frame. This means that the trajectory of a specific coordinate
 is scattered across the .xtc file. The .bat file format follows this convention. However, this format is inefficient for expansion-based entropy calculation:
 To compute 2D entropies, the whole timeline of both coordinates needs to be processed, i. e. loaded from harddisk if the CPU RAM is too small to hold the whole
 trajectory. The .gbat format now stores the trajectory of coordinates in a contiguous fashion, significantly improving harddisk reading times. For large projects,
-this speeds up the computations significantly, given that every pair of coordinate trajectories needs to reside in CPU RAM once, requiring many harddisk fetches.
-Considerably improving this I/O performance is the purpose of convert_BAT_to_GBAT. As a rule of thumb, consider using it for molecules larger than 2500 atoms
-with at least a million frames (for small systems, the time this conversion takes does hardly pay off) It is used in the following manner: 
+this speeds up the computations tremendously, given that every pair of coordinate trajectories needs to reside in CPU RAM once, requiring many harddisk fetches.
+As a rule of thumb, consider using it for molecules larger than 2500 atoms
+with at least a million frames (for small systems, the time this conversion takes does hardly pay off). It is used in the following manner: 
 
     bin/convert_BAT_to_GBAT -f input.bat -o ouput.gbat --ram #GiB
     
@@ -206,7 +206,7 @@ entropy.par is the binary output file, containing all the 1D and 2D entropy term
 The header of the file includes the same information as for the .bat file as well as the numbers of bins which were used for the entropy calculation. See section 
 2 for further information. The cpu_ram and gpu_ram parameters are the respective RAM amounts you want to provide. Assuming your system is not performing any other
 calculations (which I would discourage), be somewhat conservative with the cpu_ram and a little conservative with the gpu_ram. E. g., if your machine has 32 GB 
-RAM and your GPU has 6 GB RAM, set 25 GiB for cpu_ram and 5.25 for cpu_ram. Being to aggressive here may result in either the Linux kernel or the NVIDIA driver 
+RAM and your GPU has 6 GB RAM, set 25 GiB for cpu_ram and 5.25 for gpu_ram. Being to aggressive here may result in either the Linux kernel or the NVIDIA driver 
 killing your program, which might be a painful experience if you run a large system where the calculation takes a long time. From my experience by now, PARENT_GPU 
 is surprisingly fast even with small CPU/GPU RAM provided.
 
@@ -214,7 +214,7 @@ is surprisingly fast even with small CPU/GPU RAM provided.
 
 Although based on a different mathematical framework than MIE, the Maximum Information Spanning Tree (MIST) approximation relies on the same 
 terms to be computed as for MIE. Empirically it seems to demonstrate far superior convergence properties, so from a computational perspective
-one is tempted to consider MIST a refinement of MIE. We highly recommend applying MIST_GPU to your output .par file of PARENT.x (if you are 
+one is tempted to consider MIST a refinement of MIE. We highly recommend applying MIST_GPU to your output .par file of PARENT (if you are 
 interested in total configurational entropy values, you should consider this mandatory). Its computation time is negligible compared to PARENT_GPU. 
 In addition to our article in the Journal of Chemical Theory and Computation   
 
@@ -229,11 +229,11 @@ The program is used in the following manner:
 
 	bin/MIST_GPU -f input.par -o output.par
 
-The only difference bewtween input.par and output.par is that only the significant mutual information terms are non-zero in output.par.
+The only difference between input.par and output.par is that only the significant mutual information terms are non-zero in output.par.
 
 
 ## 3.5) get_values_from_PAR
-In order to read all entropy/mutual information terms, you need to decode the binary .par files, wether they come from the MIE (bin/PARENT_GPU) or the MIST 
+In order to read all entropy/mutual information terms, you need to decode the binary .par files, whether they come from the MIE (bin/PARENT_GPU) or the MIST 
 (bin/MIST_GPU) calculation. For this purpose, get_values_from_PAR is provided. It lists the 1D entropies of all degrees of freedom as well as all 2D entropies and 
 mutual information values of all pairs of degrees of freedom. The program is used in the following manner:
 
