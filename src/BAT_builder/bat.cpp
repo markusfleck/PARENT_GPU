@@ -129,7 +129,7 @@ int main(int argc, char* argv[])
         }
 
 				//Read the topology file and build a table for the molecules bonds as well as a list of backbone atoms
-        cout<<"Reading topologyyy."<<endl;
+        cout<<"Reading topology."<<endl;
         Topology proteins(string(arg_parser.get("-t")).c_str(), backboneAtomNames);
 
         //Build the BAT Topology using the molecules bonds (and the backbone atoms to make use of phase angles)

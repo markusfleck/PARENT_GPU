@@ -76,3 +76,34 @@ bin/MIST_GPU: src/MIST_GPU/MIST_GPU.cu obj/io.o obj/util.o | bin
 
 
 
+RAND := $(shell openssl rand -hex 12)
+IN_NAME = test_system/UBQ_UBM2
+OUT_NAME = ./$(RAND)/UBQ_UBM2
+CPU_RAM = 0.1
+GPU_RAM = 0.1
+checks: all
+	mkdir ./$(RAND)
+	bin/BAT_builder -t $(IN_NAME).top -x $(IN_NAME).xtc -o $(OUT_NAME).bat -bb "CA C N H1 O1"
+	bin/convert_BAT_to_GBAT -f $(OUT_NAME).bat -o $(OUT_NAME).gbat --ram $(CPU_RAM)
+	bin/PARENT_GPU -f $(OUT_NAME).gbat -o $(OUT_NAME).par -b 50 --cpu_ram $(CPU_RAM) --gpu_ram $(GPU_RAM)
+	bin/MIST_GPU -f $(OUT_NAME).par -o $(OUT_NAME)_MIST_GPU.par
+	bin/MIST_openMP -f $(OUT_NAME).par -o $(OUT_NAME)_MIST_openMP.par
+	bin/get_values_from_PAR -p ${OUT_NAME}.par --short 2>&1 > $(OUT_NAME)_MIE.txt
+	bin/get_values_from_PAR -p ${OUT_NAME}_MIST_GPU.par --short 2>&1 > $(OUT_NAME)_MIST_GPU.txt
+	bin/get_values_from_PAR -p ${OUT_NAME}_MIST_openMP.par --short 2>&1 > $(OUT_NAME)_MIST_openMP.txt
+	echo; echo; echo; \
+    CHECK_MIE=$$(diff $(OUT_NAME)_MIE.txt test_system/sample_output/sample_output_MIE.txt); \
+    CHECK_MIST_GPU=$$(diff $(OUT_NAME)_MIST_GPU.txt test_system/sample_output/sample_output_MIST.txt); \
+    CHECK_MIST_OPENMP=$$(diff $(OUT_NAME)_MIST_openMP.txt test_system/sample_output/sample_output_MIST.txt); \
+    if [ "$$CHECK_MIE" = "" ]; then\
+        echo "PARENT_GPU: pass"; else\
+        echo "PARENT_GPU: FAIL"; fi;\
+    if [ "$$CHECK_MIST_GPU" = "" ]; then\
+        echo "MIST_GPU: pass"; else\
+        echo "MIST_GPU: FAIL"; fi;\
+    if [ "$$CHECK_MIST_OPENMP" = "" ]; then\
+        echo "MIST_openMP: pass"; else\
+        echo "MIST_openMP: FAIL"; fi;\
+    rm -r ./$(RAND)
+
+
