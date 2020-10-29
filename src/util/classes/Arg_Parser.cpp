@@ -27,6 +27,7 @@ char* Arg_Parser::get_ext(char* file_str){
     string tmp_str = string(file_str);
 
     ptr = strtok((char*)tmp_str.c_str(), delimiter);
+    type = ptr;
     while (ptr != NULL) {
         type = ptr;
         ptr = strtok(NULL, delimiter);
