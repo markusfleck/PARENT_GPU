@@ -44,75 +44,15 @@ using namespace std;
 
 int main(int argc, char* argv[])
 {
-    cout<<endl;
-    cout<<endl;
-    cout<<endl;
-    cout<<endl;
-    cout<<endl;
-    cout<<"    BAT_builder, a program to convert a molecular dynamics trajectory from Cartesian to internal bond-angle-torsion coordinates"<<endl;
-    cout<<"    Copyright (C) 2015  Markus Fleck (member of the laboratory of Bojan Zagrovic, University of Vienna)"<<endl;
-    cout<<endl;
-    cout<<"    This program is free software: you can redistribute it and/or modify"<<endl;
-    cout<<"    it under the terms of the GNU General Public License  version 3"<<endl;
-    cout<<"    as published by the Free Software Foundation."<<endl;
-    cout<<endl;
-    cout<<"    This program is distributed in the hope that it will be useful,"<<endl;
-    cout<<"    but WITHOUT ANY WARRANTY; without even the implied warranty of"<<endl;
-    cout<<"    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the"<<endl;
-    cout<<"    GNU General Public License for more details."<<endl;
-    cout<<endl;
-    cout<<"    You should have received a copy of the GNU General Public License"<<endl;
-    cout<<"    along with this program.  If not, see <http://www.gnu.org/licenses/>."<<endl;
-    cout<<endl;
-    cout<<endl;
-    cout<<endl;
-    cout<<"    A scientific publication about this program has been released in the Journal of Chemical Theory and Computation:"<<endl;
-    cout<<"    \"PARENT: A Parallel Software Suite for the Calculation of Configurational Entropy in Biomolecular Systems\""<<endl;
-    cout<<"    DOI: 10.1021/acs.jctc.5b01217"<<endl;
-    cout<<endl;
-    cout<<"    Please include this citation in works that publish results generated using"<<endl;
-    cout<<"    this program or any modifications of this program."<<endl;
-    cout<<endl;
-    cout<<endl;
-    cout<<endl;
-    cout<<endl;
-    cout<<endl;
     
     
     Arg_Parser arg_parser(argc, argv);
-
-
-    //~ char delimiter[] = ".";
-    //~ char *ptr,*type1,*type2,*type3;
-
-
     if(argc==9){ //conversion from Cartesians to BAT in double precision
 					if(!arg_parser.exists("-t")||!arg_parser.exists("-x")||!arg_parser.exists("-o")||!arg_parser.exists("-bb")){
             cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat -bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
 						return 1;
 					}
-        
-				//~ std::string tmp1(getCmdOption(argv, argv+argc, "-t"));
-        //~ std::string tmp2(getCmdOption(argv, argv+argc, "-x"));
-        //~ std::string tmp3(getCmdOption(argv, argv+argc, "-o"));
         vector <std::string> backboneAtomNames;
-
-        //~ //extract the filename extansions from the command line arguments
-        //~ ptr = strtok((char*)tmp1.c_str(), delimiter);
-        //~ while(ptr != NULL) {
-            //~ type1=ptr;
-            //~ ptr = strtok(NULL, delimiter);
-        //~ }
-        //~ ptr = strtok((char*)tmp2.c_str(), delimiter);
-        //~ while(ptr != NULL) {
-            //~ type2=ptr;
-            //~ ptr = strtok(NULL, delimiter);
-        //~ }
-        //~ ptr = strtok((char*)tmp3.c_str(), delimiter);
-        //~ while(ptr != NULL) {
-            //~ type3=ptr;
-            //~ ptr = strtok(NULL, delimiter);
-        //~ }
 
         //check if command line arguments were supplied correctly, else put out help and quit
         if(((strcmp(arg_parser.get_ext(arg_parser.get("-t")),"top"))||(strcmp(arg_parser.get_ext(arg_parser.get("-x")),"xtc"))||(strcmp(arg_parser.get_ext(arg_parser.get("-o")),"bat")))) {
@@ -146,28 +86,8 @@ int main(int argc, char* argv[])
             cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat -bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
 						return 1;
 					}
-					
-				//~ std::string tmp1(getCmdOption(argv, argv+argc, "-t"));
-        //~ std::string tmp2(getCmdOption(argv, argv+argc, "-x"));
-        //~ std::string tmp3(getCmdOption(argv, argv+argc, "-o"));
+                
         vector <std::string> backboneAtomNames;
-
-        //~ //extract the filename extansions from the command line arguments
-        //~ ptr = strtok((char*)tmp1.c_str(), delimiter);
-        //~ while(ptr != NULL) {
-            //~ type1=ptr;
-            //~ ptr = strtok(NULL, delimiter);
-        //~ }
-        //~ ptr = strtok((char*)tmp2.c_str(), delimiter);
-        //~ while(ptr != NULL) {
-            //~ type2=ptr;
-            //~ ptr = strtok(NULL, delimiter);
-        //~ }
-        //~ ptr = strtok((char*)tmp3.c_str(), delimiter);
-        //~ while(ptr != NULL) {
-            //~ type3=ptr;
-            //~ ptr = strtok(NULL, delimiter);
-        //~ }
 
         //check if command line arguments were supplied correctly, else put out help and quit
         if(((strcmp(arg_parser.get_ext(arg_parser.get("-t")),"top"))||(strcmp(arg_parser.get_ext(arg_parser.get("-x")),"xtc"))||(strcmp(arg_parser.get_ext(arg_parser.get("-o")),"bat")))) {
@@ -202,22 +122,6 @@ int main(int argc, char* argv[])
             cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat -bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
 						return 1;
 					}
-					
-				//~ std::string tmp1(getCmdOption(argv, argv+argc, "-b"));
-        //~ std::string tmp2(getCmdOption(argv, argv+argc, "-o"));
-
-
-        //~ //extract the filename extansions from the command line arguments
-        //~ ptr = strtok((char*)tmp1.c_str(), delimiter);
-        //~ while(ptr != NULL) {
-            //~ type1=ptr;
-            //~ ptr = strtok(NULL, delimiter);
-        //~ }
-        //~ ptr = strtok((char*)tmp2.c_str(), delimiter);
-        //~ while(ptr != NULL) {
-            //~ type2=ptr;
-            //~ ptr = strtok(NULL, delimiter);
-        //~ }
 
         //check if command line arguments were supplied correctly, else put out help and quit
         if(((strcmp(arg_parser.get_ext(arg_parser.get("-b")),"bat"))||(strcmp(arg_parser.get_ext(arg_parser.get("-o")),"xtc")))) {
