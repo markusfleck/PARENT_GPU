@@ -1,6 +1,7 @@
 # PARENT_GPU
 CUDA-enabled computation of biomolecular configurational entropy from molecular dynamics trajectories.
 <br />  
+    
     Copyright (C) 2020  Markus Fleck
 
     This program is free software: you can redistribute it and/or modify
