@@ -126,7 +126,7 @@ private:
   unsigned int nBonds, nAngles, nDihedrals;
   PRECISION *bondsEntropy1D, *anglesEntropy1D, *dihedralsEntropy1D;
   PRECISION *bbEntropy, *baEntropy, *bdEntropy, *aaEntropy, *adEntropy, *ddEntropy;
-  std::vector<std::vector<int>> dihedrals_top;
+  std::vector< std::vector<int> > dihedrals_top;
   std::vector<float> masses;
   std::vector<std::string> residues;
   std::vector<int> residueNumbers;

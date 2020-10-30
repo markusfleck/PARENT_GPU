@@ -57,7 +57,7 @@ private:
     std::string outfile_string;
   int precision, n_frames;
   int n_bonds, n_angles, n_dihedrals, n_dofs;
-  std::vector<std::vector<int>> dihedrals_top;
+  std::vector< std::vector<int> > dihedrals_top;
   std::vector<float> masses;
   std::vector<std::string> residues;
   std::vector<int> residue_numbers;

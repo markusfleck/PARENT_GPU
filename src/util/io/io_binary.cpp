@@ -24,7 +24,7 @@ using namespace std;
 
 // to write the header of the binary .bat file
 int write_BAT_header(ofstream *outfile, int double_prec, int numframes,
-                     vector<vector<int>> *dihedrals_top, vector<float> *masses,
+                     vector< vector<int> > *dihedrals_top, vector<float> *masses,
                      vector<string> *residues, vector<int> *residueNumbers,
                      vector<string> *atomNames,
                      vector<string> *belongsToMolecule) {
@@ -118,7 +118,7 @@ int write_BAT_header(ofstream *outfile, int double_prec, int numframes,
 
 // to read the header of the binary .bat file
 int read_BAT_header(ifstream *infile, int *double_prec, int *numFrames,
-                    vector<vector<int>> *dihedrals_top, vector<float> *masses,
+                    vector< vector<int> > *dihedrals_top, vector<float> *masses,
                     vector<string> *residues, vector<int> *residueNumbers,
                     vector<string> *atomNames,
                     vector<string> *belongsToMolecule) {
@@ -472,7 +472,7 @@ int read_BAT_frame(ifstream *infile, int precision, int nDihedrals, float *time,
 }
 
 int write_PAR_header(ofstream *outfile, int nDihedrals, int double_prec,
-                     int numFrames, vector<vector<int>> *dihedrals_top,
+                     int numFrames, vector< vector<int> > *dihedrals_top,
                      vector<float> *masses, int bDens1D, int aDens1D,
                      int dDens1D, int bDens, int aDens, int dDens,
                      vector<string> *residues, vector<int> *residueNumbers,
@@ -581,7 +581,7 @@ int write_PAR_header(ofstream *outfile, int nDihedrals, int double_prec,
 }
 
 int read_PAR_header(ifstream *infile, int *nDihedrals, int *double_prec,
-                    int *numFrames, vector<vector<int>> *dihedrals_top,
+                    int *numFrames, vector< vector<int> > *dihedrals_top,
                     vector<float> *masses, int *version, int *bDens, int *aDens,
                     int *dDens, int *bDens1D, int *aDens1D, int *dDens1D,
                     vector<string> *residues, vector<int> *residueNumbers,

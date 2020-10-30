@@ -976,7 +976,7 @@ int main(int argc, char *argv[]) {
   int threads_per_block = prop.warpSize * WARPMULTIPLES;
 
   unsigned int n_bins;
-  vector<vector<int>> dihedrals_top;
+  vector< vector<int> > dihedrals_top;
   vector<float> masses;
   vector<string> residues;
   vector<int> residueNumbers;
