@@ -32,10 +32,10 @@ terms for machine learning strongly suggests itself. In this context, stay tuned
 
 # TODOs/Known Issues/Future plans
 - This code was extensively tested on my own system. Remember, however, that code matures with the feedback of its users.
-- Due to its objetct-oriented and therfore encapsulated style, I hope PARENT_GPU.cu is quite friendly to other programmers who want to contribute to/fork the project. However,
+- Due to its object-oriented and therefore encapsulated style, I hope PARENT_GPU.cu is quite friendly to other programmers who want to contribute to/fork the project. However,
 PARENT_GPU.cu is hardly documented, which is a big issue and highest in my personal priority list.
-- The Entropy_Matrix class should be wrapped into Python in order to make use its abundant machine learning libraries
-- more than 95% percent of the calculation time are spent during histogramming. Entropy calculations are quite special in this respect,
+- The Entropy_Matrix class should be wrapped into Python in order to make use its abundant machine learning libraries.
+- More than 95% percent of the calculation time is spent during histogramming. Entropy calculations are quite special in this respect,
 as ~2500 bins are the usual scenario here, which greatly reduces atomicAdd penalties. Therefore, many standard optimization techniques have very limited effect. The one bottle-neck on consumer graphics cards is double precision performance. It might be possible to use fixed-point arithmetics for PARENT_GPU, circumventing
 the low double precision performance of consumer-grade GPUs.
 - currently, PARENT is a single-node, single-GPU program. In fact, parallelization across nodes/GPUs should be "relatively easy"
