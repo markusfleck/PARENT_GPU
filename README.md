@@ -15,6 +15,7 @@ CUDA-enabled computation of biomolecular configurational entropy from molecular 
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 <br /> 
+
 # General considerations
 This code has its roots in my PARENT repository, which features hybrid MPI/openMP architecture and is targeted at CPU clusters. PARENT_GPU
 was written to enable information-theoretical, expansion-based configurational entropy calculations on workstations. In particular this means that CPU
