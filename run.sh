@@ -1,5 +1,20 @@
 #!/bin/bash
 
+# Example script to operate the PAREN_GPU suite end-to-end
+# Copyright (C) 2020  Markus Fleck
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License version 3 as 
+# published by the Free Software Foundation.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 CPU_RAM="8.0" # The CPU RAM you would like to provide in GiB. Be somewhat conservative here. E. g., if your machine has 32 GB RAM, set 25  
 GPU_RAM="2.0" # The GPU RAM you would like to provide in GiB. Be a litte conservative here. E. g., if your GPU has 6 GB RAM, set 5.25
 CUDA_ARCH=61 # The CUDA capability of your GPU, normally the higher the better. In doubt, leave it as it is: 61 is the minimum required

@@ -1,7 +1,19 @@
 # PARENT_GPU
 CUDA-enabled computation of biomolecular configurational entropy from molecular dynamics trajectories.
 <br />  
-<br />  
+    Copyright (C) 2020  Markus Fleck
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License version 3 as 
+    published by the Free Software Foundation.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 <br /> 
 # General considerations
 This code has its roots in my PARENT repository, which features hybrid MPI/openMP architecture and is targeted at CPU clusters. PARENT_GPU
@@ -37,7 +49,7 @@ inside a shell. Then unzip and navigate to the top folder. In the file run.sh ch
 IN_NAME to the path and name of your .top and .xtc files ignoring the file extensions.
 (if those two files have different base names, consider changing them or using symbolic links).
 Change OUT_NAME to "output/{name_of_your_protein}". Review the commented configuration in the 
-first ten lines of run.sh. Then run
+first lines of run.sh. Then run
 
     bash run.sh
     
