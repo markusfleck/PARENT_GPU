@@ -22,23 +22,22 @@ This code has its roots in my PARENT repository, which features hybrid MPI/openM
 was written to enable information-theoretical, expansion-based configurational entropy calculations on workstations. In particular this means that CPU
 RAM is not a limiting factor anymore, since PARENT_GPU is efficient in reloading from the hard disk. By making use of GPUs, the code is performant. Roughly 
 speaking, you can expect a single GPU to outperform a CPU cluster of ~150 cores (or more). The reason for this surprising performance is that the number of 
-calculations performed on the GPU essentially grows quadratically with the amount of data transferred, as 2D entropies are calculated for each possible pair of degrees of 
-freedom. In more intuitive words, GPUs are such beasts in raw computation that very often you have a hard time providing them with enough data to keep 
-them busy calculating. Therefore, doing calculations for every possible pair in the data you provide is a scenario where they really shine. 
+calculations performed on the GPU essentially grows with the square of the amount of data transferred, as 2D entropy terms are calculated for each possible pair of degrees of 
+freedom. In more intuitive words, GPUs are such beasts in raw computation that providing them enough data to keep them busy calculating is a crucial task. Therefore, performing calculations for every possible pair in the data you provide is a scenario where they really shine. 
 
 One of the strongest motivations for writing this code was the fact 
 that the calculated mutual information terms essentially form a distance matrix of interaction strengths inside molecules (or between molecules). Using these 
 terms for machine learning strongly suggests itself. In this context, stay tuned, I will release a first working use-case asap ...    
 
 # TODOs/Known Issues/Future plans
-- This code was extensively tested on my own system. Remember, however, that code matures with the feedback of its users.
+- This code was extensively tested on my own systems. Remember, however, that code matures with the feedback of its users.
 - Due to its object-oriented and therefore encapsulated style, I hope PARENT_GPU.cu is quite friendly to other programmers who want to contribute to/fork the project. However,
 PARENT_GPU.cu is hardly documented, which is a big issue and highest in my personal priority list.
-- The Entropy_Matrix class should be wrapped into Python in order to make use its abundant machine learning libraries.
-- More than 95% percent of the calculation time is spent during histogramming. Entropy calculations are quite special in this respect,
-as ~2500 bins are the usual scenario here, which greatly reduces atomicAdd penalties. Therefore, many standard optimization techniques have very limited effect. The one bottle-neck on consumer graphics cards is double precision performance. It might be possible to use fixed-point arithmetics for PARENT_GPU, circumventing
+- The Entropy_Matrix class should be wrapped into Python in order to make use of its abundant machine learning libraries.
+- More than 95% percent of the calculation time is spent during binning histograms. Entropy calculations are quite special in this respect,
+as ~2500 bins are the usual scenario here. This greatly reduces atomicAdd penalties and therefore, many standard optimization techniques have very limited effect. The one bottle-neck on consumer graphics cards is double precision performance. It might be possible to use fixed-point arithmetic for PARENT_GPU, circumventing
 the low double precision performance of consumer-grade GPUs.
-- currently, PARENT is a single-node, single-GPU program. In fact, parallelization across nodes/GPUs should be "relatively easy"
+- Currently, PARENT is a single-node, single-GPU program. In fact, parallelization across nodes/GPUs should be "relatively easy".
 
 
 # 0) QUICK AND DIRTY <br />  
@@ -62,10 +61,6 @@ If you run the code for testing purposes only without any modifications,
 the calculation should take something like 2-5 minutes. The resulting values at the end of the
 files should match those in "test_system/sample_output".
 
-If you get permission errors that means that your program has resided (or still resides) on a
-filesystem which does not support Linux permissions. Move to a supported filesystem and 
-unzip again or "chmod +x" the files which throw errors.
-
 You are strongly encouraged to read the rest of this document, but at least the next section.
  
 
@@ -73,7 +68,7 @@ You are strongly encouraged to read the rest of this document, but at least the 
 # 1) INSTALLATION AND TESTING
 
   This code uses NVIDIA CUDA, so you need to make
-  sure that your system supports this. The minium requirements are CUDA 9.0
+  sure that your system supports this. The minimum requirements are CUDA 9.0
   as well as a graphics card supporting CUDA compute capability 6.1.
   
   The code was developed and tested on a GTX 1060 as well as a RTX 2060 Super,
@@ -118,10 +113,10 @@ You are strongly encouraged to read the rest of this document, but at least the 
   probability densities of the degrees of freedom. For the 2D values (on which the mutual information terms are based), 
   the square of this value will be used for building the histograms. This means if you set NBINS=50, 2500 bins will be used for every 2D histogram.
   This parameter is used exclusively during the Mutual Information Expansion (MIE) calculations, performed 
-  by the program PARENT_GPU, which can be considered the core of this suite. Using 50 of them seems 
+  by the program PARENT\_GPU, which can be considered the core of this suite. Using 50 of them seems 
   to be a good starting point for ~10^6 frames of the MD trajectory. If you have considerably more
   (less) frames to process, you might want to tweak these parameters slightly up (down).
-  In doubt, just leave this parameter as it is.
+  If in doubt, just leave this parameter as it is.
   
   The "BACKBONE_ATOMS" parameter is designed to find rigid torsion angles in your topology, 
   e. g. at a protein backbone. The names of the atoms here should match the names from 
@@ -130,11 +125,11 @@ You are strongly encouraged to read the rest of this document, but at least the 
   entropy calculations, as the relative phase angles explore a much smaller range of values.
   
   In the case you want to run a considerable amount of trajectories so that compilation/check time 
-  is an issue for you, you might want to uncomment the lines
+  is an issue for you, you might want to comment the lines
   
-    # make clean
-    # make CUDA_ARCH=${CUDA_ARCH}
-    # make checks
+    make clean
+    make CUDA_ARCH=${CUDA_ARCH}
+    make checks
     
 especially the line
     
@@ -157,23 +152,15 @@ this suite. The main purpose of this program is to convert every frame in the .x
 which is stored in Cartesian coordinates, to internal bond-angle-torsion (BAT, Z-matrix) coordinates.
 Furthermore additional information is attached to the header of the resulting .bat file, namely 
 
-	-a version number
-	
-	-the precision of the file (single or double precision)
-	
-	-the number of non-redundant torsion angles(dihedrals) in the system 
-	(which relates to the number of atoms by #atoms = #torsions + 3)
-	
-	-the number of frames in the trajectory
-	
-	-a list of all non-redundant torsion angles
-	(specifying their constituent atoms using the atom numbers from the .top file)
-	
-	-atom weights of all atoms in the system (not used yet)
-	
-	-atom names, residue names, residue numbers and molecule names for every atom in the system
-
-
+- a version number
+- the precision of the file (single or double precision)
+- the number of non-redundant torsion angles (dihedrals) in the system 
+(which relates to the number of atoms by #atoms = #torsions + 3)
+- the number of frames in the trajectory
+- a list of all non-redundant torsion angles
+(specifying their constituent atoms using the atom numbers from the .top file)
+- atom weights of all atoms in the system
+- atom names, residue names, residue numbers and molecule names for every atom in the system
 
 The program is used in the following manner:
 
@@ -182,9 +169,10 @@ The program is used in the following manner:
 input.top, input.xtc and output.bat are self-explanatory.
 
 "BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ..." lists the names of atoms belonging to a rigid backbone
-as stated in the .top file, e. g.  "CA C N H1 O1" for a protein. Phaseangles are defined relative to a rigid dihedral. Also see section 2 for further information.
+as stated in the .top file, e. g.  "CA C N H1 O1" for a protein. Phaseangles are defined relative to a rigid dihedral,
+improving numerical accuracy. Also see section 2 for further information.
 
-\[single_precision\] (the square brackets indicate optional), if set, writes the .bat trajectory in single precision instead of double precision,
+[single_precision] (the square brackets indicate optional), if set, writes the .bat trajectory in single precision instead of double precision,
 which is discouraged, since all calculation is done in double precision anyway. Only use single precision if you are short of harddisk storage.
 
 Additionally, the program can perform a back-conversion from .bat to .xtc, which is done by issuing the following command:
@@ -198,16 +186,16 @@ that the chosen topology for every molecule in the complex is consistent with th
 isolation.
 
 ## 3.2) convert_BAT_to_GBAT
-This program was developed especially for the present GPU version of PARENT, i. e. PARENT_GPU. While the original version of PARENT was targeted for a CPU 
-cluster,
-PARENT_GPU is designed for workstations (and roughly speaking outperforms <200 core CPU clusters with a modern consumer grade graphics card). This means that PARENT_GPU will 
-in many cases reload parts of the trajectory from the harddisk if the whole trajectory does not fit into CPU RAM. GROMACS trajectories are stored in a per-frame 
+This program was developed especially for the present GPU version of PARENT, i. e. PARENT_GPU. While the original version of PARENT is designed for CPU 
+clusters,
+PARENT_GPU is targeted at workstations. This means that PARENT_GPU will 
+reload parts of the trajectory from the hard disk if the whole trajectory does not fit into CPU RAM, which is often the case. GROMACS trajectories are stored in a per-frame 
 fashion: for 
 every time step, the coordinates of the whole molecule are stored together, followed by the next frame. This means that the trajectory of a specific coordinate
 is scattered across the .xtc file. The .bat file format follows this convention. However, this format is inefficient for expansion-based entropy calculation:
-To compute 2D entropies, the whole timeline of both coordinates needs to be processed, i. e. loaded from harddisk if the CPU RAM is too small to hold the whole
-trajectory. The .gbat format now stores the trajectory of coordinates in a contiguous fashion, significantly improving harddisk reading times. For large projects,
-this speeds up the computations tremendously, given that every pair of coordinate trajectories needs to reside in CPU RAM once, requiring many harddisk fetches.
+To compute 2D entropy values, the whole trajectory of both coordinates needs to be processed, i. e. loaded from hard disk if the CPU RAM is too small to hold the whole
+trajectory. The .gbat format now stores the trajectory of coordinates in a contiguous fashion, significantly improving hard disk reading times. For large projects,
+this speeds up the computations tremendously, given that every pair of coordinate trajectories needs to reside in CPU RAM once, requiring many hard disk fetches.
 As a rule of thumb, consider using it for molecules larger than 2500 atoms
 with at least a million frames (for small systems, the time this conversion takes does hardly pay off). It is used in the following manner: 
 
@@ -240,9 +228,8 @@ The program is used in the following manner:
 
 input.[g]bat is the result from the conversion to internal BAT coordinates done with BAT_builder or (subsequently) convert_BAT_to_GBAT.
 
-entropy.par is the binary output file, containing all the 1D and 2D entropy terms (from which the mutual information terms can be easiliy calculated).
-The header of the file includes the same information as for the .bat file as well as the numbers of bins which were used for the entropy calculation. See section 
-2 for further information. The cpu_ram and gpu_ram parameters are the respective RAM amounts you want to provide. Assuming your system is not performing any other
+entropy.par is the binary output file, containing all the 1D and 2D entropy terms (from which the mutual information terms can be easily calculated).
+The header of the file includes the same information as for the .bat file as well as the numbers of bins which were used for the entropy calculation. The cpu_ram and gpu_ram parameters are the respective RAM amounts you want to provide. Assuming your system is not performing any other
 calculations (which I would discourage), be somewhat conservative with the cpu_ram and a little conservative with the gpu_ram. E. g., if your machine has 32 GB 
 RAM and your GPU has 6 GB RAM, set 25 GiB for cpu_ram and 5.25 for gpu_ram. Being to aggressive here may result in either the Linux kernel or the NVIDIA driver 
 killing your program, which might be a painful experience if you run a large system where the calculation takes a long time. From my experience by now, PARENT_GPU 
@@ -252,7 +239,7 @@ is surprisingly fast even with small CPU/GPU RAM provided.
 
 Although based on a different mathematical framework than MIE, the Maximum Information Spanning Tree (MIST) approximation relies on the same 
 terms to be computed as for MIE. Empirically it seems to demonstrate far superior convergence properties, so from a computational perspective
-one is tempted to consider MIST a refinement of MIE. We highly recommend applying MIST_GPU to your output .par file of PARENT (if you are 
+one is tempted to consider MIST a refinement of MIE. We highly recommend applying MIST_GPU to your output .par file of PARENT_GPU (if you are 
 interested in total configurational entropy values, you should consider this mandatory). Its computation time is negligible compared to PARENT_GPU. 
 In addition to our article in the Journal of Chemical Theory and Computation   
 
@@ -272,12 +259,12 @@ The only difference between input.par and output.par is that only the significan
 
 ## 3.5) get_values_from_PAR
 In order to read all entropy/mutual information terms, you need to decode the binary .par files, whether they come from the MIE (bin/PARENT_GPU) or the MIST 
-(bin/MIST_GPU) calculation. For this purpose, get_values_from_PAR is provided. It lists the 1D entropies of all degrees of freedom as well as all 2D entropies and 
+(bin/MIST_GPU) calculation. For this purpose, get_values_from_PAR is provided. It lists the 1D entropy values of all degrees of freedom as well as all 2D entropy values and 
 mutual information values of all pairs of degrees of freedom. The program is used in the following manner:
 
 bin/get_values_from_PAR -p input.par [--short]
 
-Its output is generally large. If you are only interested in a summary, specify the --short paramter. If you plan to e. g. use these values for machine learning,
+Its output is generally large. If you are only interested in a summary, specify the --short parameter. If you plan to e. g. use these values for machine learning,
 I highly recommend to have a look at the src/util/classes/Entropy_Matrix.cpp class (in fact, I plan to wrap this class into a Python3 library).
 
 
