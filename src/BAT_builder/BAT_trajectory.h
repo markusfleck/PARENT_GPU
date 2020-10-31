@@ -17,6 +17,12 @@
 #ifndef BAT_TRAJECTORY_H
 #define BAT_TRAJECTORY_H
 
+#ifdef COMPAT
+    #define VARTYPE int
+#else
+    #define VARTYPE int64_t
+#endif
+
 
 #include <vector>
 #include <string>
@@ -59,7 +65,7 @@ public:
     struct t_fileio* xtc_ifile;
     struct t_fileio* xtc_ofile;
     int natoms;
-    int64_t step;
+    VARTYPE step;
     real time;
     matrix box;
     rvec*  x;
