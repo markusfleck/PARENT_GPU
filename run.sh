@@ -24,15 +24,19 @@ export OMP_NUM_THREADS=4 # Set the number of threads of your CPU.
 IN_NAME="test_system/UBQ_UBM2" # The name and location of your trajectory (.xtc) and topology (.top) files
 OUT_NAME="output/UBQ_UBM" # The name and location of the output
 NBINS=50 # The number of bins used for the discretization of the trajectory. The 2D entropy values use the square of this nuber as the number of bins
+BACKBONE_ATOMS="CA C N H1 O1" # The names of the backbone atoms. Adjusting them to the nomenclature of your .top file improves numerical accuracy by using phaseangles 
+
+
+
 
 # make clean # remember to recompile if you change machines (e. g. when using cloud computing services)
 make CUDA_ARCH=${CUDA_ARCH}
-make checks; echo -e "\n\n\n" # run checks to make sure your system produces correct results 
+make checks; echo -e "\n\n\n" # run checks to make sure your system produces correct results. Consider commenting this line if your system configuration has not changed 
 
 # rm -r output # remember that files will be overwritten without a warning
 mkdir output
 
-bin/BAT_builder -t ${IN_NAME}.top -x ${IN_NAME}.xtc -o ${OUT_NAME}.bat -bb "CA C N H1 O1" # convert the trajectory from GROMACS .xtc to PARENT/PARENT_GPU .bat format. Remember that .bat files are generally large, so make sure you provide enough harddisk space  
+bin/BAT_builder -t ${IN_NAME}.top -x ${IN_NAME}.xtc -o ${OUT_NAME}.bat -bb "${BACKBONE_ATOMS}" # convert the trajectory from GROMACS .xtc to PARENT/PARENT_GPU .bat format. Remember that .bat files are generally large, so make sure you provide enough harddisk space  
 bin/convert_BAT_to_GBAT -f ${OUT_NAME}.bat -o ${OUT_NAME}.gbat --ram $CPU_RAM # optionally, convert .bat to .gbat, tremendously enhancing harddisk reading times. Useful for large molecules/trajectories. 
 
 
