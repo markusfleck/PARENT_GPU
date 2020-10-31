@@ -68,7 +68,7 @@ int main(int argc, char *argv[]) {
       size_t externals_bytes = n_frames * (11 * sizeof(float) + 6 * inc);
       if(externals_bytes > cpu_ram_available){
         My_Error my_error((string("ERROR: OUT OF MEMORY! YOU NEED TO PROVIDE AT LEAST ") +
-                       to_string(externals_bytes/1024/1024/1024) + string(" GiB TO STORE THE EXTERNAL DEGREES OF FREEDOM (MORE RAM WILL SIGNIFICANTLY INCREASE PERFORMANCE). ABORTING."))
+                       to_string(externals_bytes/1024.0/1024.0/1024.0) + string(" GiB TO STORE THE EXTERNAL DEGREES OF FREEDOM (MORE RAM WILL SIGNIFICANTLY INCREASE PERFORMANCE). ABORTING."))
                           .c_str());
         throw my_error;
       } 

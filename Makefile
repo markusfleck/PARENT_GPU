@@ -75,7 +75,7 @@ obj/util.o: src/util/util.cpp src/util/util.h | obj
     
 
 bin/convert_BAT_to_GBAT: src/BAT_builder/convert_BAT_to_GBAT.cpp obj/util.o obj/Arg_Parser.o obj/Bat_File.o | bin
-	$(CXX) src/BAT_builder/convert_BAT_to_GBAT.cpp obj/util.o obj/Arg_Parser.o obj/Bat_File.o -o bin/convert_BAT_to_GBAT $(CXXFLAGS)
+	$(CXX) --std=c++11 src/BAT_builder/convert_BAT_to_GBAT.cpp obj/util.o obj/Arg_Parser.o obj/Bat_File.o -o bin/convert_BAT_to_GBAT $(CXXFLAGS)
     
 
 bin/get_values_from_PAR: src/process_output/get_values_from_PAR.cpp obj/io.o obj/util.o | bin
