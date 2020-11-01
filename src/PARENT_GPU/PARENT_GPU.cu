@@ -62,11 +62,11 @@ class GPU_RAM_Block {
 public:
   unsigned char type; // the type of the degrees of freedom the block contains, i. e. either bonds(0), angles(1) or dihedrals(2)
   unsigned int dof_id_start_g; // the global id of the first dof in the block
-  unsigned int dof_id_end_g; // the global id of the last dof in the block
+  unsigned int dof_id_end_g; // the global id of the last dof in the block (inclusive)
   unsigned int n_dofs; // the total number of dofs in the block
   size_t n_bytes; // the amount of data the block occupies in bytes
-  PRECISION *cpu_ram_start; // a pointer to the data on the CPU (set upon object instantiation)
-  PRECISION *gpu_ram_start; // a pointer to the data on the GPU (set only upon calling the deploy function)
+  PRECISION *cpu_ram_start; // a pointer to the data on the CPU (set upon object instantiation). Trajectories are stored contigeously for each dof
+  PRECISION *gpu_ram_start; // a pointer to the data on the GPU (set only upon calling the deploy function). Trajectories are stored contigeously for each dof
 
   GPU_RAM_Block(PRECISION *cpu_ram_start, unsigned int dof_id_start_g,
                 unsigned int dof_id_end_g, unsigned int n_frames,
@@ -88,46 +88,47 @@ public:
   }
 };
 
+
+// this class represents a chunk of degrees of freedom (dofs) which can be deployed to a CPU RAM bank. Extrema as well as 1D entropies are calculated upon deployement.
 class CPU_RAM_Block {
 public:
-  unsigned int dof_id_start_g;
-  unsigned int dof_id_end_g; // inclusive
-  unsigned int n_dofs;
-  int type_id_start[3] = {-1, -1, -1};
-  int type_id_end[3] = {-1, -1, -1}; // inclusive
-  unsigned int type_n_dofs[3] = {0, 0, 0};
-  unsigned int gpu_ram_blocks_per_type[3];
-  unsigned int n_dihedrals;
-  unsigned int gpu_dofs_per_block;
-  unsigned int n_frames;
-  unsigned int n_frames_padded;
-  unsigned char precision_traj;
-  vector<GPU_RAM_Block> blocks;
-  PRECISION *block_start;
-  PRECISION *minima;
-  PRECISION *maxima;
-  bool extrema_calculated = false;
-  unsigned int n_bins;
-  PRECISION *result_entropy1D;
-  PRECISION *type_addr[3];
-  PRECISION *bonds;
-  PRECISION *angles;
-  PRECISION *dihedrals;
-  Bat *bat;
+  unsigned int dof_id_start_g; // the global id of the first dof in the block
+  unsigned int dof_id_end_g; // the global id of the last dof in the block (inclusive)
+  unsigned int n_dofs; // the total number of dofs in the block
+  int type_id_start_g[3] = {-1, -1, -1}; // the global ids of the first dof in the block for each dof type (i. e. bond, angle, dihedral)
+  int type_id_end_g[3] = {-1, -1, -1}; // the global ids of the last dof (inclusive) in the block for each dof type (i. e. bond, angle, dihedral)
+  unsigned int type_n_dofs[3] = {0, 0, 0}; // the number of dofs in the block for each type
+  unsigned int gpu_ram_blocks_per_type[3]; // the number of GPU_RAM_Blocks needed for each dof type
+  unsigned int n_dihedrals; // the number of total number of dihedrals in the molecule. From this number, the number of bonds(==n_dihedrals + 2), angles(==n_dihedrals + 1) and atoms(==n_dihedrals + 3) can be calculated  
+  unsigned int gpu_dofs_per_block; // the number of dofs which fits in a GPU_RAM_Block
+  unsigned int n_frames; // the number of frames of the trajectory 
+  unsigned int n_frames_padded; // the padded number of frames. The padding is done to a multiple of 4 and used in the histo2D_shared_block kernel for efficient data loading
+  vector<GPU_RAM_Block> blocks; // the GPU_RAM_Blocks associated to this CPU_RAM_Block
+  PRECISION *block_start; // the location of the trajectories. Trajectories are stored contigeously for each dof
+  PRECISION *minima; // the location of the minima for each dof
+  PRECISION *maxima; // the location of the maxima for each dof
+  bool extrema_calculated = false; // a flag indicating if minima, maxima and 1D entropy values have already been calculated
+  unsigned int n_bins; // the number of bins used for building the histograms
+  PRECISION *result_entropy1D; // the location to store the 1D entropy results
+  PRECISION *type_addr[3]; // the start of the trajectories for each dof type 
+  PRECISION *bonds; // == type_addr[0]
+  PRECISION *angles; // == type_addr[1]
+  PRECISION *dihedrals; // == type_addr[2]
+  Bat *bat; // the BAT trajectory class to load the data from hard disk
 
   CPU_RAM_Block(unsigned int dof_id_start_g, unsigned int dof_id_end_g,
                 unsigned int gpu_dofs_per_block, Bat *bat, PRECISION *minima,
                 PRECISION *maxima, unsigned int n_bins,
                 PRECISION *result_entropy1D) {
 
+    // initilize the variables            
     this->dof_id_start_g = dof_id_start_g;
     this->dof_id_end_g = dof_id_end_g;
-    this->n_dofs = dof_id_end_g - dof_id_start_g + 1;
+    this->n_dofs = dof_id_end_g - dof_id_start_g + 1; // note that dof_id_end_g is inclusive 
     this->n_dihedrals = bat->get_n_dihedrals();
     this->gpu_dofs_per_block = gpu_dofs_per_block;
     this->n_frames = bat->get_n_frames();
     this->n_frames_padded = bat->get_n_frames_padded(4);
-    this->precision_traj = bat->get_precision();
     this->minima = minima;
     this->maxima = maxima;
     this->n_bins = n_bins;
@@ -135,70 +136,71 @@ public:
     this->bat = bat;
 
     for (unsigned short type = get_dof_type_from_id(dof_id_start_g, n_dihedrals);
-         type <= get_dof_type_from_id(dof_id_end_g, n_dihedrals); type++) {
-      if (dof_id_start_g < get_min_id_for_type(type, n_dihedrals)) {
-        type_id_start[type] = get_min_id_for_type(type, n_dihedrals);
+         type <= get_dof_type_from_id(dof_id_end_g, n_dihedrals); type++) { // for all dof types contained in the CPU_RAM_Block
+         
+      if (dof_id_start_g < get_min_id_for_type(type, n_dihedrals)) { // if the first dof id of the CPU_RAM_Block is smaller than the first id of the type 
+        type_id_start_g[type] = get_min_id_for_type(type, n_dihedrals); // the block contains the first dof of the type
       } else {
-        type_id_start[type] = dof_id_start_g;
+        type_id_start_g[type] = dof_id_start_g; // otherwise the first dof of this type in the block is also the very first dof in the block
       }
 
-      if (dof_id_end_g > get_max_id_for_type(type, n_dihedrals)) {
-        type_id_end[type] = get_max_id_for_type(type, n_dihedrals);
+      if (dof_id_end_g > get_max_id_for_type(type, n_dihedrals)) { // if the last dof id of the CPU_RAM_Block is larger than the last id of the type
+        type_id_end_g[type] = get_max_id_for_type(type, n_dihedrals); // the block contains the last dof of the type
       } else {
-        type_id_end[type] = dof_id_end_g;
+        type_id_end_g[type] = dof_id_end_g; // otherwise the last dof of this type in the block is also the very last dof in the block
       }
-      type_n_dofs[type] = type_id_end[type] - type_id_start[type] + 1;
+      type_n_dofs[type] = type_id_end_g[type] - type_id_start_g[type] + 1; // set the number of dofs for each type in the block
 
-      gpu_ram_blocks_per_type[type] = type_n_dofs[type] / gpu_dofs_per_block;
-      if (type_n_dofs[type] % gpu_dofs_per_block > 0)
-        gpu_ram_blocks_per_type[type] += 1;
+      gpu_ram_blocks_per_type[type] = (type_n_dofs[type] + (gpu_dofs_per_block - 1) ) / gpu_dofs_per_block; // calculate how many GPU_RAM_Blocks are needed for each dof type. There is an additional GPU_RAM_Block used if the devision has a remainder
     }
   }
 
-  void deploy(PRECISION *block_start) {
+  // This function loads the dofs from the hard disk into this CPU RAM block and calculates minima, maxima and 1D entropy values
+  void deploy(PRECISION *block_start) { // load the data to the RAM bank with the adrress block_start
 
-    this->block_start = block_start;
-    type_addr[TYPE_B] = block_start;
-    type_addr[TYPE_A] = block_start + type_n_dofs[TYPE_B] * n_frames_padded;
+    this->block_start = block_start; // save the RAM bank where the data is loaded to
+    type_addr[TYPE_B] = block_start; // save the start of the bonds
+    type_addr[TYPE_A] = block_start + type_n_dofs[TYPE_B] * n_frames_padded; // save the start of the angles
     type_addr[TYPE_D] =
-        block_start + (type_n_dofs[TYPE_B] + type_n_dofs[TYPE_A]) * n_frames_padded;
-    bonds = type_addr[TYPE_B];
-    angles = type_addr[TYPE_A];
-    dihedrals = type_addr[TYPE_D];
+        block_start + (type_n_dofs[TYPE_B] + type_n_dofs[TYPE_A]) * n_frames_padded; // save the start of the dihedrals
+    bonds = type_addr[TYPE_B]; // create an alias for the bonds
+    angles = type_addr[TYPE_A]; // create an alias for the angles
+    dihedrals = type_addr[TYPE_D]; // create an alias for the dihedrals
 
-    bat->load_dofs(type_addr, type_id_start, type_id_end, 4);
+    bat->load_dofs(type_addr, type_id_start_g, type_id_end_g, 4); // load the dofs contigeously (order bonds, angles, dihedrals) and with a padding of 4
 
-    modfit_dihedrals();
-    if (!extrema_calculated) {
-      calculate_extrema();
-      calculate_entropy1D();
-      extrema_calculated = true;
+    modfit_dihedrals(); // apply modiftting to the dihedrals, see the function below
+    if (!extrema_calculated) { // if the extrema have not already been calculated 
+      calculate_extrema(); // calculate minima and maxima 
+      calculate_entropy1D(); // also calculate 1D entropy values
+      extrema_calculated = true; // set the flag which indicates that minima, maxima as well as 1D entropy values have already been calculated
     }
 
-    blocks.clear();
-    for (unsigned char type = get_dof_type_from_id(dof_id_start_g, n_dihedrals);
+    blocks.clear(); // clear the GPU_RAM_Blocks to reinitialize them
+    for (unsigned char type = get_dof_type_from_id(dof_id_start_g, n_dihedrals); // for all dof types in the CPU_RAM_Block
          type <= get_dof_type_from_id(dof_id_end_g, n_dihedrals); type++) {
-      for (unsigned int i = 0; i < gpu_ram_blocks_per_type[type]; i++) {
-        unsigned int block_id_start =
-            type_id_start[type] + i * gpu_dofs_per_block;
-        unsigned int block_id_end =
-            type_id_start[type] + (i + 1) * gpu_dofs_per_block - 1;
-        if (int(block_id_end) > type_id_end[type])
-          block_id_end = type_id_end[type];
+      for (unsigned int i = 0; i < gpu_ram_blocks_per_type[type]; i++) { // and for all GPU_RAM_Blocks of this type
+        unsigned int gpu_block_id_start_g =
+            type_id_start_g[type] + i * gpu_dofs_per_block; // calculate the id of the first dof in the GPU_RAM_Block to be created
+        unsigned int gpu_block_id_end_g =
+            type_id_start_g[type] + (i + 1) * gpu_dofs_per_block - 1; // calculate the id of the last dof in the GPU_RAM_Block to be created
+        if (int(gpu_block_id_end_g) > type_id_end_g[type])
+          gpu_block_id_end_g = type_id_end_g[type]; // if gpu_block_id_end_g refers to a different dof type than gpu_block_id_start_g, set gpu_block_id_end_g to the last id of the current dof type 
         PRECISION *cpu_ram_start =
-            block_start + (block_id_start - dof_id_start_g) * n_frames_padded;
-        blocks.push_back(*new GPU_RAM_Block(cpu_ram_start, block_id_start,
-                                            block_id_end, n_frames_padded,
-                                            n_dihedrals));
+            block_start + (gpu_block_id_start_g - dof_id_start_g) * n_frames_padded; // caluclate the address of the first dof of the current GPU_RAM_Block in the CPU RAM
+        blocks.push_back(*new GPU_RAM_Block(cpu_ram_start, gpu_block_id_start_g,
+                                            gpu_block_id_end_g, n_frames_padded,
+                                            n_dihedrals)); // create the GPU_RAM_Block and add it to the vector blocks, containing all GPU_RAM_Blocks 
       }
     }
   }
 
- 
+    //this function finds the longest non-zero stretch of the trajectory for each dihedral and shifts the circular dihedral coordinates
+    //so that the longest non-zero stretch has coordinate value 0. This leads to efficiently filled bins and improves numerical accuracy 
   void modfit_dihedrals() {
     if (type_n_dofs[TYPE_D] == 0)
-      return;
-    const PRECISION pi = acos(-1);
+      return; // return if there are no dihedrals in the CPU_RAM_Block
+    const PRECISION pi = acos(-1); // get the value of pi from the library 
 
 #pragma omp parallel
     {
@@ -216,32 +218,32 @@ public:
 
         binsize = (2 * pi +
                    5e-9 * (sizeof(PRECISION) == sizeof(float) ? 100000 : 1)) /
-                  MODFITNBINS;
-        for (unsigned int i = 0; i < n_frames; i++)
+                  MODFITNBINS; // divide 2 pi into MODFITNBINS bins, making sure that we cover a little more than 2 pi (depending on the precision used for the calculations) 
+        for (unsigned int i = 0; i < n_frames; i++) // bin the dihedrals
           histo[int((dihedrals[j * n_frames_padded + i]) / binsize)] += 1;
 
         zeroExists = false;
-        for (int k = 0; k < MODFITNBINS; k++)
+        for (int k = 0; k < MODFITNBINS; k++) // check if there are empty bins
           zeroExists = zeroExists || (histo[k] == 0);
 
         if (zeroExists) { // if any of the bins of the histogram is empty find
-                          // the longest consecutive stretch of  empty bins
+                          // the longest consecutive stretch of empty bins
           longestZeroStretch = 0;
           currentZeroStretch = 0;
           longestZeroStretchPos = -1;
           for (int k = 0; k < 2 * MODFITNBINS;
                k++) {                // for all bins of the histogram
             int l = k % MODFITNBINS; // taking car of zero stretches which span
-                                     // the boundaries
+                                     // the circular boundaries
             if ((currentZeroStretch == 0) &&
                 (histo[l] == 0)) { // find and save a beginning zero stretch
               currentZeroStretch = 1;
               currentZeroStretchPos = k;
             }
-            if ((currentZeroStretch > 0) && (histo[l] == 0)) {
+            else if ((currentZeroStretch > 0) && (histo[l] == 0)) {
               currentZeroStretch += 1;
             }
-            if ((currentZeroStretch > 0) &&
+            else if ((currentZeroStretch > 0) &&
                 (histo[l] != 0)) { // and the end of it. If it is currently the
                                    // longest zero stretch, save it
               if (currentZeroStretch > longestZeroStretch) {
@@ -253,7 +255,7 @@ public:
           }
         } else { // if none of the bins is empty
           longestZeroStretchPos =
-              0; // misuse the zeroStretch variables for determining the minimum
+              0; // misuse the zeroStretch variables for determining the minimally filled bin
           longestZeroStretch = histo[0];
           for (int k = 0; k < MODFITNBINS; k++) {
             if (histo[k] < longestZeroStretch) {
@@ -276,6 +278,7 @@ public:
     }
   }
 
+  // calculate the extrema of the dofs for binning
   void calculate_extrema() {
 #pragma omp parallel
     {
@@ -283,7 +286,7 @@ public:
 
 #pragma omp for
       for (unsigned int j = 0; j < n_dofs; j++) { // for all dofs
-        tmpMax = block_start[j * n_frames_padded];
+        tmpMax = block_start[j * n_frames_padded]; // set the temporary minimum/maximum to the coordinate value of the first frame
         tmpMin = block_start[j * n_frames_padded];
         for (unsigned int i = 1; i < n_frames; i++) { // and all frames
           if (block_start[j * n_frames_padded + i] > tmpMax) {
