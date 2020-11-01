@@ -14,20 +14,16 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
-#define PRECISION double
-#define PRECISION2 double2
-#define PRECISION4 double4
+#define PRECISION double // define the compiled precision 
+#define PRECISION4 double4 // used in the 2D histogram kernel for efficient memory fetches
 
 
-#define MODFITNBINS 100
-#define WARPMULTIPLES 1
-#define MEMORY_USAGE 0.8 // GPU
-#define RAM_USAGE 0.8    // CPU
-#define DEBUG false
-#define N_STREAMS 32
-#define HISTOGRAM_THREAD_WORK_MULTIPLE 8
-#define HISTOGRAM_THREADS 512
-#define USE_SHARED_MEM_HISTOGRAMS
+#define MODFITNBINS 100 // used for finding the longest non-zero stretch for the circular dihedrals
+#define WARPMULTIPLES 1 // the number of warps used per block
+#define N_STREAMS 32 // how many cuda streams to use
+#define HISTOGRAM_THREAD_WORK_MULTIPLE 8 // increase to do more work per thread durig building the 2D histograms
+#define HISTOGRAM_THREADS 512 // the number of threads per block during building the histograms
+#define USE_SHARED_MEM_HISTOGRAMS // use the histo2D_shared_block kernel
 
 #include <cmath>
 #include <cstddef>
@@ -59,32 +55,36 @@ angles or only dihedrals. In our example, there are 1000 - 1 = 999 bonds
 and 1000 - 2 = 998 angles. So, if dof_g = 1050, then dof_gt = 1050 - 999 = 51.
 The order is bonds before angles, angles before dihedrals.
  */
-
+ 
+ 
+// this class represents a chunk of degrees of freedom (dofs) in CPU RAM which can be loaded to the GPU
 class GPU_RAM_Block {
 public:
-  unsigned char type;
-  unsigned int dof_id_start_g;
-  unsigned int dof_id_end_g;
-  unsigned int n_dofs;
-  size_t n_bytes;
-  PRECISION *cpu_ram_start;
-  PRECISION *gpu_ram_start;
+  unsigned char type; // the type of the degrees of freedom the block contains, i. e. either bonds(0), angles(1) or dihedrals(2)
+  unsigned int dof_id_start_g; // the global id of the first dof in the block
+  unsigned int dof_id_end_g; // the global id of the last dof in the block
+  unsigned int n_dofs; // the total number of dofs in the block
+  size_t n_bytes; // the amount of data the block occupies in bytes
+  PRECISION *cpu_ram_start; // a pointer to the data on the CPU (set upon object instantiation)
+  PRECISION *gpu_ram_start; // a pointer to the data on the GPU (set only upon calling the deploy function)
 
   GPU_RAM_Block(PRECISION *cpu_ram_start, unsigned int dof_id_start_g,
                 unsigned int dof_id_end_g, unsigned int n_frames,
                 unsigned int n_dihedrals) {
+    // initialize the variables
     this->cpu_ram_start = cpu_ram_start;
     this->type = get_dof_type_from_id(dof_id_start_g, n_dihedrals);
     this->dof_id_start_g = dof_id_start_g;
     this->dof_id_end_g = dof_id_end_g;
-    n_dofs = dof_id_end_g - dof_id_start_g + 1;
-    n_bytes = n_dofs * n_frames * sizeof(PRECISION);
+    n_dofs = dof_id_end_g - dof_id_start_g + 1; // note that dof_id_end_g is inclusive 
+    n_bytes = n_dofs * n_frames * sizeof(PRECISION); // each dof features a trajectory with n_frames, each frame of each dof represented by a single number of PRECISION
   }
 
+  // This function loads the data of the GPU_RAM_Block from the CPU to the GPU. The pointer to the data on the CPU is set upon object instantiation, the pointer for the GPU is handed over as a function parameter
   void deploy(PRECISION *gpu_ram_start) {
     gpuErrchk(cudaMemcpy(gpu_ram_start, cpu_ram_start, n_bytes,
-                         cudaMemcpyHostToDevice));
-    this->gpu_ram_start = gpu_ram_start;
+                         cudaMemcpyHostToDevice)); // copy the data to one of the two GPU RAM banks, which have already been alloctated
+    this->gpu_ram_start = gpu_ram_start; // save the location of the data on the GPU, which will be one of the two GPU RAM banks
   }
 };
 
