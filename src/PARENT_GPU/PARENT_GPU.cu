@@ -288,23 +288,23 @@ public:
       for (unsigned int j = 0; j < n_dofs; j++) { // for all dofs
         tmpMax = block_start[j * n_frames_padded]; // set the temporary minimum/maximum to the coordinate value of the first frame
         tmpMin = block_start[j * n_frames_padded];
-        for (unsigned int i = 1; i < n_frames; i++) { // and all frames
-          if (block_start[j * n_frames_padded + i] > tmpMax) {
+        for (unsigned int i = 1; i < n_frames; i++) { // the for all frames
+          if (block_start[j * n_frames_padded + i] > tmpMax) { // set the temporary maximum/minimum the a new value if the coordinates value is larger/smaller in the current frame  
             tmpMax = block_start[j * n_frames_padded + i];
           }
           if (block_start[j * n_frames_padded + i] < tmpMin) {
             tmpMin = block_start[j * n_frames_padded +
-                                 i]; // find the maximum and minmum values
+                                 i]; 
           }
         }
-        if ((tmpMin < 0.0) || (tmpMax < 0.0)) {
+        if ((tmpMin < 0.0) || (tmpMax < 0.0)) { //check for errors
           cerr << "ERROR: Degree of freedom " << dof_id_start_g + j
                << " is smaller than 0.0" << endl;
           exit(EXIT_FAILURE);
         }
         tmpMin -= 5e-9 * (sizeof(PRECISION) == sizeof(float)
                               ? 1e5
-                              : 1); // and increase the boundaries a tiny bit
+                              : 1); // and increase the boundaries a tiny bit depending on the precision used
         tmpMax += 5e-9 * (sizeof(PRECISION) == sizeof(float) ? 1e5 : 1);
         if (tmpMin < 0.0) {
           tmpMin = 0.0;
@@ -326,12 +326,12 @@ public:
       int occupbins;
 #pragma omp for
       for (unsigned int j = dof_id_start_g; j <= dof_id_end_g;
-           j++) { // for all dofs (using threads)
+           j++) { // for all dofs (using omp threads)
         for (unsigned int k = 0; k < n_bins; k++) {
           histo[k] = 0; // initialize a histogram with zeros
         }
         binsize = (maxima[j] - minima[j]) /
-                  n_bins; // and calculate the size of the bins
+                  n_bins; // calculate the size of the bins
         for (unsigned int i = 0; i < n_frames;
              i++) { // and fill the histogram using all frames of the trajectory
           histo[int(
@@ -373,19 +373,19 @@ public:
 
 class GPU_RAM_Layout {
 public:
-  char *gpu_ram_start;
-  size_t gpu_n_bytes;
-  unsigned int dofs_per_block;
-  PRECISION *dof_block_1;
-  PRECISION *dof_block_2;
-  PRECISION *result;
-  unsigned int *occupied_bins;
-  unsigned int *histograms;
+  char *gpu_ram_start; // the address of the data on the GPU
+  size_t gpu_n_bytes; // the size of the data on the GPU
+  unsigned int dofs_per_block; // how many dofs fit into one ram bank, considering the additional storage for the (temporary) results
+  PRECISION *dof_block_1; // the address of the first ram bank
+  PRECISION *dof_block_2; // the address of the second ram bank
+  PRECISION *result; // the address of the 2D entropy entropy results
+  unsigned int *occupied_bins; // the address of the result which stores the number of occupied bins in the histograms for Herzel entropy unbiasing
+  unsigned int *histograms; // the address of the histograms to be build
 
   GPU_RAM_Layout(unsigned int n_frames, unsigned int n_bins,
                  size_t gpu_n_bytes, unsigned int n_dofs_total) {
     // calculate the maximum number of dofs (for one of the two dof_blocks) so
-    // that everything still fits into GPU RAM
+    // that everything still fits into GPU RAM. The formula is:  gpu_n_bytes == 2 * dofs_per_block * n_frames * sizeof(PRECISION) + dofs_per_block^2 * ( (n_bins^2 + 1) * sizeof(unsigned int) + sizeof(PRECISION) )
     double a = 2 * n_frames * sizeof(PRECISION);
     double b = sizeof(PRECISION) + sizeof(unsigned int) * (n_bins * n_bins + 1);
     dofs_per_block =
@@ -396,21 +396,21 @@ public:
     // if all dofs fit into RAM, still set up two blocks to be consistent with
     // the algorithm
     if (2 * dofs_per_block > n_dofs_total) {
-      dofs_per_block = n_dofs_total / 2;
-      dofs_per_block += n_dofs_total % 2;
+      dofs_per_block = (n_dofs_total + 1 )/ 2;
     }
     
-    gpu_n_bytes = (static_cast<size_t>(2) * dofs_per_block * n_frames + dofs_per_block * dofs_per_block) * sizeof(PRECISION) + ( dofs_per_block * dofs_per_block * (n_bins * n_bins + 1) ) * sizeof(unsigned int);
-    gpuErrchk(cudaMalloc((void **)&gpu_ram_start, gpu_n_bytes));
-    this->gpu_n_bytes = gpu_n_bytes;
+    // calculate the number of bytes to be allocated on the GPU 
+    gpu_n_bytes = (static_cast<size_t>(2) * dofs_per_block * n_frames + dofs_per_block * dofs_per_block) * sizeof(PRECISION) + ( dofs_per_block * dofs_per_block * (n_bins * n_bins + 1) ) * sizeof(unsigned int); 
+    gpuErrchk(cudaMalloc((void **)&gpu_ram_start, gpu_n_bytes)); // and allocate it
+    this->gpu_n_bytes = gpu_n_bytes; // store the number of bytes in the class
 
     // set the pointers for partitioning the GPU RAM according to the calculated
     // dofs_per_block
-    dof_block_1 = (PRECISION *)gpu_ram_start;
-    dof_block_2 = dof_block_1 + dofs_per_block * n_frames;
-    result = dof_block_2 + dofs_per_block * n_frames;
-    occupied_bins = (unsigned int *)(result + dofs_per_block * dofs_per_block);
-    histograms = occupied_bins + dofs_per_block * dofs_per_block;
+    dof_block_1 = (PRECISION *)gpu_ram_start; // set the starting address for GPU RAM bank 1 
+    dof_block_2 = dof_block_1 + dofs_per_block * n_frames; // set the starting address for GPU RAM bank 1
+    result = dof_block_2 + dofs_per_block * n_frames; // set the starting address for the 2D entropy results
+    occupied_bins = (unsigned int *)(result + dofs_per_block * dofs_per_block); // set the starting address for the occupied bins result
+    histograms = occupied_bins + dofs_per_block * dofs_per_block; // set the starting address for the histograms to be build
   }
 };
 
