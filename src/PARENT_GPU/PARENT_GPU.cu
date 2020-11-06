@@ -416,38 +416,37 @@ public:
 
 class CPU_RAM_Layout {
 public:
-  char *cpu_ram_start;
-  size_t cpu_n_bytes;
-  unsigned int dofs_per_block;
-  PRECISION *dof_block_1;
-  PRECISION *dof_block_2;
-  PRECISION *result_entropy;
-  PRECISION *result_entropy1D;
-  PRECISION *result_entropy1D_b;
-  PRECISION *result_entropy1D_a;
-  PRECISION *result_entropy1D_d;
-  PRECISION *result_entropy2D;
-  PRECISION *result_entropy2D_bb;
-  PRECISION *result_entropy2D_ba;
-  PRECISION *result_entropy2D_bd;
-  PRECISION *result_entropy2D_aa;
-  PRECISION *result_entropy2D_ad;
-  PRECISION *result_entropy2D_dd;
-  PRECISION *extrema;
-  PRECISION *minima;
-  PRECISION *maxima;
-  PRECISION *tmp_result_entropy;
-  unsigned int *tmp_result_occupied_bins;
+  char *cpu_ram_start; // The address of the whole data block
+  size_t cpu_n_bytes; // The number of bytes to use
+  unsigned int dofs_per_block; // The number of dofs which each of the two blocks holds
+  PRECISION *dof_block_1; // The address of the first dof block (==cpu_ram_start)
+  PRECISION *dof_block_2; // The address of the second dof block
+  PRECISION *result_entropy; // The address of the entropy results
+  PRECISION *result_entropy1D; // The address of the 1D entropy results (==result_entropy)
+  PRECISION *result_entropy1D_b; // The address of the 1D bonds entropy results (==result_entropy)
+  PRECISION *result_entropy1D_a; // The address of the 1D angles entropy results
+  PRECISION *result_entropy1D_d; // The address of the 1D dihedrals entropy results
+  PRECISION *result_entropy2D; // The address of the 2D entropy results
+  PRECISION *result_entropy2D_bb; // The address of the bond-bond 2D entropy results (==result_entropy2D)
+  PRECISION *result_entropy2D_ba; // The address of the bond-angle 2D entropy results
+  PRECISION *result_entropy2D_bd; // The address of the bond-dihedral 2D entropy results
+  PRECISION *result_entropy2D_aa; // The address of the angle-angle 2D entropy results
+  PRECISION *result_entropy2D_ad; // The address of the angle-dihedral 2D entropy results
+  PRECISION *result_entropy2D_dd; // The address of the dihedral-dihedral 2D entropy results
+  PRECISION *extrema; // The address of the extrema
+  PRECISION *minima; // The address of the minima (==extrema)
+  PRECISION *maxima; // The address of the maxima
+  PRECISION *tmp_result_entropy; // The address for copying the entropy results from GPU to CPU RAM
+  unsigned int *tmp_result_occupied_bins; // The address for copying the occupied_bins results from GPU to CPU RAM
 
   CPU_RAM_Layout(unsigned int n_frames, size_t cpu_n_bytes, unsigned int gpu_dofs_per_block,
                  unsigned int n_dihedrals) {
-    unsigned int n_dofs_total = 3 * (n_dihedrals + 1);
+    unsigned int n_dofs_total = 3 * (n_dihedrals + 1); // == n_bonds + n_angles + n_dihedrals
     unsigned int n_bonds = n_dihedrals + 2;
     unsigned int n_angles = n_dihedrals + 1;
-    // calculate the maximum number of dofs (for one of the two dof_blocks) so
-    // that everything still fits into CPU RAM
-
-
+    
+    // calculate the maximum number of dofs (for one of the two dof_blocks) so that everything still fits into CPU RAM. From the storage provided (cpu_n_bytes), subtract the storage used for the temporary results(tmp_result_entropy and tmp_result_occupied_bins),
+    // the storage for the minima, maxima and 1D entropy values as well as the 2D entroy values. What remains can be used for the two dof blocks, where each dof block needs ( dofs_per_block * n_frames * sizeof(PRECISION) ) bytes.     
     dofs_per_block = ( cpu_n_bytes - gpu_dofs_per_block * gpu_dofs_per_block * ( sizeof(PRECISION) + sizeof(unsigned int) )  - (3 * n_dofs_total + n_dofs_total * ( n_dofs_total - 1 ) / 2) * sizeof(PRECISION) )
                    / double( 2 * n_frames * sizeof(PRECISION) );
 
@@ -459,23 +458,20 @@ public:
               "enhance performance."
            << endl;
     }
+    
     // if all dofs fit into RAM, still set up two blocks to be consistent with
     // the algorithm
+    if (2 * dofs_per_block > n_dofs_total) dofs_per_block = (n_dofs_total + 1) / 2; //TODO: In this case, only load the trajectory once
     
-    if (2 * dofs_per_block > n_dofs_total) {
-      dofs_per_block = n_dofs_total / 2;
-      dofs_per_block += n_dofs_total % 2; //TODO: In this case, only load the trajectory once
-    }
-    
+    //calculate the actual number of CPU RAM bytes used
     cpu_n_bytes = (static_cast<size_t>(2) * dofs_per_block * n_frames + 3 * n_dofs_total + n_dofs_total * (n_dofs_total - 1) / 2) * sizeof(PRECISION) + gpu_dofs_per_block * gpu_dofs_per_block * ( sizeof(PRECISION) + sizeof(unsigned int) );
-    
-    
-    cpu_ram_start = new char[cpu_n_bytes];
-    this->cpu_n_bytes = cpu_n_bytes;
+    this->cpu_n_bytes = cpu_n_bytes; // store this number
+    cpu_ram_start = new char[cpu_n_bytes]; // allocate those bytes
+
 
     // set the pointers for partitioning the CPU RAM according to the calculated
     // dofs_per_block
-    dof_block_1 = (PRECISION *)cpu_ram_start;
+    dof_block_1 = (PRECISION *) cpu_ram_start;
     dof_block_2 = dof_block_1 + dofs_per_block * n_frames;
 
     result_entropy = dof_block_2 + dofs_per_block * n_frames;
@@ -486,13 +482,13 @@ public:
 
     result_entropy2D = result_entropy1D + n_dofs_total;
     result_entropy2D_bb = result_entropy2D;
-    result_entropy2D_ba = result_entropy2D_bb + n_bonds * (n_bonds - 1) / 2;
-    result_entropy2D_bd = result_entropy2D_ba + n_bonds * n_angles;
-    result_entropy2D_aa = result_entropy2D_bd + n_bonds * n_dihedrals;
-    result_entropy2D_ad = result_entropy2D_aa + n_angles * (n_angles - 1) / 2;
-    result_entropy2D_dd = result_entropy2D_ad + n_angles * n_dihedrals;
+    result_entropy2D_ba = result_entropy2D_bb + n_bonds * (n_bonds - 1) / 2; // binomial formula for pairs 
+    result_entropy2D_bd = result_entropy2D_ba + n_bonds * n_angles; // all combinations
+    result_entropy2D_aa = result_entropy2D_bd + n_bonds * n_dihedrals; // all combinations
+    result_entropy2D_ad = result_entropy2D_aa + n_angles * (n_angles - 1) / 2; // binomial formula for pairs
+    result_entropy2D_dd = result_entropy2D_ad + n_angles * n_dihedrals; // all combinations
 
-    extrema = result_entropy2D + n_dofs_total * (n_dofs_total - 1) / 2;
+    extrema = result_entropy2D + n_dofs_total * (n_dofs_total - 1) / 2; // binomial formula for pairs
     minima = extrema;
     maxima = extrema + n_dofs_total;
     tmp_result_entropy = maxima + n_dofs_total;
