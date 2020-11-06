@@ -19,10 +19,10 @@
 
 
 #define MODFITNBINS 100 // used for finding the longest non-zero stretch for the circular dihedrals
-#define WARPMULTIPLES 1 // the number of warps used per block
 #define N_STREAMS 32 // how many cuda streams to use
 #define HISTOGRAM_THREAD_WORK_MULTIPLE 8 // increase to do more work per thread durig building the 2D histograms
 #define HISTOGRAM_THREADS 512 // the number of threads per block during building the histograms
+#define PLNP_THREADS 32
 #define USE_SHARED_MEM_HISTOGRAMS // use the histo2D_shared_block kernel
 
 #include <cmath>
@@ -532,10 +532,10 @@ public:
   }
 };
 
+// This class orchestrates the whole entropy calculation
 class PARENT_GPU {
 public:
-  RAM *ram;
-  int threads_per_block;
+  RAM *ram; // an object containing the CPU as well as the GPU RAM layout
   unsigned int n_bins;
   unsigned int n_frames;
   unsigned int n_frames_padded;
@@ -546,8 +546,7 @@ public:
 
   PARENT_GPU(size_t cpu_n_bytes,
              size_t gpu_n_bytes, char const *bat_str,
-             unsigned int n_bins, int threads_per_block) {
-    this->threads_per_block = threads_per_block;
+             unsigned int n_bins) {
     this->n_bins = n_bins;
 
     bat = new Bat(bat_str);
@@ -700,20 +699,15 @@ public:
         unsigned int *histogram = ram->gpu_ram_layout->histograms +
                                   (i * block2->n_dofs + j) * n_bins * n_bins;
         
-        int threads_per_block_sav = threads_per_block;
-        threads_per_block = HISTOGRAM_THREADS;
-        int blocks = n_frames / threads_per_block / HISTOGRAM_THREAD_WORK_MULTIPLE;
-        if (n_frames % threads_per_block > 0)
-          blocks++;
+        int blocks = (n_frames + (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE - 1) ) / (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE);
         #ifdef USE_SHARED_MEM_HISTOGRAMS
-        histo2D_shared_block<<<blocks, threads_per_block, n_bins * n_bins * sizeof(unsigned int), streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(
+        histo2D_shared_block<<<blocks, HISTOGRAM_THREADS, n_bins * n_bins * sizeof(unsigned int), streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(
         #else
-        histo2D<<<blocks, threads_per_block, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(
+        histo2D<<<blocks, HISTOGRAM_THREADS, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(
         #endif
             block1->gpu_ram_start + i * n_frames_padded,
             block2->gpu_ram_start + j * n_frames_padded, n_frames, histogram, n_bins,
             bin_size1, bin_size2, min1, min2);
-        threads_per_block = threads_per_block_sav;
       }
     }
     //gpuErrchk(cudaPeekAtLastError());
@@ -742,38 +736,36 @@ public:
             ram->gpu_ram_layout->result + i * block2->n_dofs + j;
         unsigned int *occupbins =
             ram->gpu_ram_layout->occupied_bins + i * block2->n_dofs + j;
-        int blocks = n_bins * n_bins / threads_per_block;
-        if (n_bins * n_bins % threads_per_block > 0)
-          blocks++;
+        int blocks = (n_bins * n_bins + (PLNP_THREADS - 1) ) / PLNP_THREADS;
 
         switch (get_pair_type(block1->type, block2->type)) {
         case (TYPE_BB):
-          cu_bbEnt<<<blocks, threads_per_block, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
+          cu_bbEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
                                                   bin_size1, bin_size2, min1,
                                                   min2, plnpsum, occupbins);
           break;
         case (TYPE_BA):
-          cu_baEnt<<<blocks, threads_per_block, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(
+          cu_baEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(
               histogram, n_frames, n_bins, n_bins, bin_size1, bin_size2, min1,
               min2, plnpsum, occupbins);
           break;
         case (TYPE_BD):
-          cu_bdEnt<<<blocks, threads_per_block, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
+          cu_bdEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
                                                   n_bins, bin_size1, bin_size2,
                                                   min1, plnpsum, occupbins);
           break;
         case (TYPE_AA):
-          cu_aaEnt<<<blocks, threads_per_block, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
+          cu_aaEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
                                                   bin_size1, bin_size2, min1,
                                                   min2, plnpsum, occupbins);
           break;
         case (TYPE_AD):
-          cu_adEnt<<<blocks, threads_per_block, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
+          cu_adEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
                                                   n_bins, bin_size1, bin_size2,
                                                   min1, plnpsum, occupbins);
           break;
         case (TYPE_DD):
-          cu_ddEnt<<<blocks, threads_per_block, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
+          cu_ddEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
                                                   bin_size1, bin_size2, plnpsum,
                                                   occupbins);
           break;
@@ -837,20 +829,15 @@ public:
         unsigned int *histogram = ram->gpu_ram_layout->histograms +
                                   (i * block->n_dofs + j) * n_bins * n_bins;
       
-        int threads_per_block_sav = threads_per_block;
-        threads_per_block = HISTOGRAM_THREADS;
-        int blocks = n_frames / threads_per_block / HISTOGRAM_THREAD_WORK_MULTIPLE;
-        if (n_frames % threads_per_block > 0)
-          blocks++;
+        int blocks = (n_frames + (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE - 1) ) / (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE);
         #ifdef USE_SHARED_MEM_HISTOGRAMS
-        histo2D_shared_block<<<blocks, threads_per_block, n_bins * n_bins * sizeof(unsigned int), streams[(i * block->n_dofs + j) % N_STREAMS]>>>(
+        histo2D_shared_block<<<blocks, HISTOGRAM_THREADS, n_bins * n_bins * sizeof(unsigned int), streams[(i * block->n_dofs + j) % N_STREAMS]>>>(
         #else
-        histo2D<<<blocks, threads_per_block, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(
+        histo2D<<<blocks, HISTOGRAM_THREADS, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(
         #endif
             block->gpu_ram_start + i * n_frames_padded,
             block->gpu_ram_start + j * n_frames_padded, n_frames, histogram, n_bins,
             bin_size1, bin_size2, min1, min2);
-        threads_per_block = threads_per_block_sav;
       }
     }
     //gpuErrchk(cudaPeekAtLastError());
@@ -879,38 +866,36 @@ public:
             ram->gpu_ram_layout->result + i * block->n_dofs + j;
         unsigned int *occupbins =
             ram->gpu_ram_layout->occupied_bins + i * block->n_dofs + j;
-        int blocks = n_bins * n_bins / threads_per_block;
-        if (n_bins * n_bins % threads_per_block > 0)
-          blocks++;
+        int blocks = (n_bins * n_bins + (PLNP_THREADS - 1) ) / PLNP_THREADS;
 
         switch (get_pair_type(block->type, block->type)) {
         case (TYPE_BB):
-          cu_bbEnt<<<blocks, threads_per_block, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
+          cu_bbEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
                                                   bin_size1, bin_size2, min1,
                                                   min2, plnpsum, occupbins);
           break;
         case (TYPE_BA):
-          cu_baEnt<<<blocks, threads_per_block, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(
+          cu_baEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(
               histogram, n_frames, n_bins, n_bins, bin_size1, bin_size2, min1,
               min2, plnpsum, occupbins);
           break;
         case (TYPE_BD):
-          cu_bdEnt<<<blocks, threads_per_block, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
+          cu_bdEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
                                                   n_bins, bin_size1, bin_size2,
                                                   min1, plnpsum, occupbins);
           break;
         case (TYPE_AA):
-          cu_aaEnt<<<blocks, threads_per_block, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
+          cu_aaEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
                                                   bin_size1, bin_size2, min1,
                                                   min2, plnpsum, occupbins);
           break;
         case (TYPE_AD):
-          cu_adEnt<<<blocks, threads_per_block, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
+          cu_adEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
                                                   n_bins, bin_size1, bin_size2,
                                                   min1, plnpsum, occupbins);
           break;
         case (TYPE_DD):
-          cu_ddEnt<<<blocks, threads_per_block, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
+          cu_ddEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
                                                   bin_size1, bin_size2, plnpsum,
                                                   occupbins);
           break;
@@ -974,8 +959,6 @@ int main(int argc, char *argv[]) {
        << prop.maxGridSize[1] << " " << prop.maxGridSize[2] << endl;
   cout << "Warp size: " << prop.warpSize << endl << endl;
 
-  int threads_per_block = prop.warpSize * WARPMULTIPLES;
-
   unsigned int n_bins;
   vector< vector<int> > dihedrals_top;
   vector<float> masses;
@@ -1027,8 +1010,7 @@ int main(int argc, char *argv[]) {
 
 
   PARENT_GPU parent_gpu(cpu_ram_available, gpu_ram_available,
-                        arg_parser.get("-f"), n_bins,
-                        threads_per_block);
+                        arg_parser.get("-f"), n_bins);
   parent_gpu.calculate_entropy();
   cout << "Writing .par file." << endl;
   parent_gpu.ent_mat->write(arg_parser.get("-o"));
