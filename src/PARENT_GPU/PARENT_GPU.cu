@@ -371,6 +371,7 @@ public:
   }
 };
 
+// this class provides the memory organization on the GPU via two RAM banks
 class GPU_RAM_Layout {
 public:
   char *gpu_ram_start; // the address of the data on the GPU
@@ -414,6 +415,8 @@ public:
   }
 };
 
+
+// this class provides the memory organization on the CPU via two RAM banks
 class CPU_RAM_Layout {
 public:
   char *cpu_ram_start; // The address of the whole data block
@@ -498,32 +501,31 @@ public:
   }
 };
 
+// This class manages the RAM on the CPU as well as on the GPU
 class RAM {
 public:
-  
-  
-  GPU_RAM_Layout *gpu_ram_layout;
-  CPU_RAM_Layout *cpu_ram_layout;
-  unsigned int n_dihedrals;
-  unsigned int n_dofs_total;
-  vector<CPU_RAM_Block> blocks;
+  GPU_RAM_Layout *gpu_ram_layout; // the RAM layout on the GPU
+  CPU_RAM_Layout *cpu_ram_layout; // the RAM layout on the CPU
+  unsigned int n_dihedrals; // the number of dihedrals of the molecule(s)
+  unsigned int n_dofs_total; // the total number of degrees of freedom
+  vector<CPU_RAM_Block> blocks; // a vector holding all the CPU_RAM_Blocks to be deployed to the two RAM banks
 
   RAM(size_t cpu_n_bytes, size_t gpu_n_bytes,
       Bat *bat, unsigned int n_bins) {
       
-    this->n_dihedrals = bat->get_n_dihedrals();
-    this->n_dofs_total = 3 * (n_dihedrals + 1);
+    this->n_dihedrals = bat->get_n_dihedrals(); // get the number of dihedrals from the .(g)bat file
+    this->n_dofs_total = 3 * (n_dihedrals + 1); // calculate the total number number of degrees of freedom from the number of dihedrals 
 
     gpu_ram_layout = new GPU_RAM_Layout(bat->get_n_frames_padded(4), n_bins,
-                                        gpu_n_bytes, n_dofs_total);
+                                        gpu_n_bytes, n_dofs_total); // create the RAM layout on the GPU 
     cpu_ram_layout =
-        new CPU_RAM_Layout(bat->get_n_frames_padded(4), cpu_n_bytes, gpu_ram_layout->dofs_per_block, n_dihedrals);
+        new CPU_RAM_Layout(bat->get_n_frames_padded(4), cpu_n_bytes, gpu_ram_layout->dofs_per_block, n_dihedrals); // create the RAM layout on the CPU using gpu_ram_layout->dofs_per_block
     for (unsigned int i = 0; i < n_dofs_total;
-         i += cpu_ram_layout->dofs_per_block) {
+         i += cpu_ram_layout->dofs_per_block) { // create CPU_RAM_Blocks according to cpu_ram_layout->dofs_per_block
       unsigned int end_g = i + cpu_ram_layout->dofs_per_block - 1;
-      if (end_g > n_dofs_total - 1)
+      if (end_g > n_dofs_total - 1) // the last block can contain less dofs than the others
         end_g = n_dofs_total - 1;
-      blocks.push_back(*new CPU_RAM_Block(
+      blocks.push_back(*new CPU_RAM_Block( // save the created blocks in the blocks vector
           i, end_g, gpu_ram_layout->dofs_per_block, bat, cpu_ram_layout->minima,
           cpu_ram_layout->maxima, n_bins, cpu_ram_layout->result_entropy1D));
     }
