@@ -23,7 +23,7 @@
 #define HISTOGRAM_THREAD_WORK_MULTIPLE 8 // increase to do more work per thread durig building the 2D histograms
 #define HISTOGRAM_THREADS 512 // the number of threads per block during building the histograms
 #define PLNP_THREADS 32
-#define USE_SHARED_MEM_HISTOGRAMS // use the histo2D_shared_block kernel
+// #define USE_SHARED_MEM_HISTOGRAMS // use the histo2D_shared_block kernel
 
 #include <cmath>
 #include <cstddef>
@@ -452,15 +452,6 @@ public:
     // the storage for the minima, maxima and 1D entropy values as well as the 2D entroy values. What remains can be used for the two dof blocks, where each dof block needs ( dofs_per_block * n_frames * sizeof(PRECISION) ) bytes.     
     dofs_per_block = ( cpu_n_bytes - gpu_dofs_per_block * gpu_dofs_per_block * ( sizeof(PRECISION) + sizeof(unsigned int) )  - (3 * n_dofs_total + n_dofs_total * ( n_dofs_total - 1 ) / 2) * sizeof(PRECISION) )
                    / double( 2 * n_frames * sizeof(PRECISION) );
-
-    
-    if (dofs_per_block < gpu_dofs_per_block) {
-      cerr << "WARNING: You probably have a GPU with a lot of RAM but your CPU "
-              "RAM is rather small. ";
-      cerr << "I recommend to get more CPU RAM, as this should significantly "
-              "enhance performance."
-           << endl;
-    }
     
     // if all dofs fit into RAM, still set up two blocks to be consistent with
     // the algorithm
@@ -520,6 +511,7 @@ public:
                                         gpu_n_bytes, n_dofs_total); // create the RAM layout on the GPU 
     cpu_ram_layout =
         new CPU_RAM_Layout(bat->get_n_frames_padded(4), cpu_n_bytes, gpu_ram_layout->dofs_per_block, n_dihedrals); // create the RAM layout on the CPU using gpu_ram_layout->dofs_per_block
+      
     for (unsigned int i = 0; i < n_dofs_total;
          i += cpu_ram_layout->dofs_per_block) { // create CPU_RAM_Blocks according to cpu_ram_layout->dofs_per_block
       unsigned int end_g = i + cpu_ram_layout->dofs_per_block - 1;
@@ -529,6 +521,18 @@ public:
           i, end_g, gpu_ram_layout->dofs_per_block, bat, cpu_ram_layout->minima,
           cpu_ram_layout->maxima, n_bins, cpu_ram_layout->result_entropy1D));
     }
+    
+    cout << "Using " << blocks.size() << " blocks of degrees of freedom for the calculation according to the provided CPU RAM." <<endl;  
+    cout << "Your provided CPU RAM can hold up to " << cpu_ram_layout->dofs_per_block << " degrees of freedom per block, your GPU RAM "<< gpu_ram_layout->dofs_per_block << " degrees of freedom per block." <<endl;  
+      
+    if (cpu_ram_layout->dofs_per_block < gpu_ram_layout->dofs_per_block) {
+      cerr << "WARNING: You probably have a GPU with a lot of RAM but your CPU "
+              "RAM is rather small. ";
+      cerr << "I recommend to get more CPU RAM, as this should significantly "
+              "enhance performance."
+           << endl;
+    }
+    
   }
 };
 
@@ -667,6 +671,7 @@ public:
             }
         }
     }
+    if(block->blocks.size() == 1) block->blocks[0].deploy(ram->gpu_ram_layout->dof_block_1); // if there is only one GPU_RAM_Block, the loop above never gets executed, so this single GPU_RAM_Block needs to be deployed here
     calculate_block_gpu(&(block->blocks[block->blocks.size() - 1]));
   }
 
