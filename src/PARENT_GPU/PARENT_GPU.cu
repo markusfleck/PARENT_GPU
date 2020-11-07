@@ -23,7 +23,7 @@
 #define HISTOGRAM_THREAD_WORK_MULTIPLE 8 // increase to do more work per thread durig building the 2D histograms
 #define HISTOGRAM_THREADS 512 // the number of threads per block during building the histograms
 #define PLNP_THREADS 32
-// #define USE_SHARED_MEM_HISTOGRAMS // use the histo2D_shared_block kernel
+#define USE_SHARED_MEM_HISTOGRAMS // use the histo2D_shared_block kernel
 
 #include <cmath>
 #include <cstddef>
@@ -406,12 +406,12 @@ public:
     this->gpu_n_bytes = gpu_n_bytes; // store the number of bytes in the class
 
     // set the pointers for partitioning the GPU RAM according to the calculated
-    // dofs_per_block
-    dof_block_1 = (PRECISION *)gpu_ram_start; // set the starting address for GPU RAM bank 1 
+    // dofs_per_block. The order is important here for alignement on the GPU (dofs_per_block can be an odd number: unsigned int is half the bytes of double, also the kernels use e. g. double4 for efficient memory reads.)
+    dof_block_1 = (PRECISION*) gpu_ram_start; // set the starting address for GPU RAM bank 1
     dof_block_2 = dof_block_1 + dofs_per_block * n_frames; // set the starting address for GPU RAM bank 1
-    result = dof_block_2 + dofs_per_block * n_frames; // set the starting address for the 2D entropy results
-    occupied_bins = (unsigned int *)(result + dofs_per_block * dofs_per_block); // set the starting address for the occupied bins result
-    histograms = occupied_bins + dofs_per_block * dofs_per_block; // set the starting address for the histograms to be build
+    histograms = (unsigned int *) (dof_block_2 + dofs_per_block * n_frames); // set the starting address for the histograms to be build
+    result = (PRECISION*) (histograms + dofs_per_block * dofs_per_block * n_bins * n_bins); // set the starting address for the 2D entropy results
+    occupied_bins = (unsigned int*) (result + dofs_per_block * dofs_per_block); // set the starting address for the occupied bins result
   }
 };
 
@@ -450,8 +450,13 @@ public:
     
     // calculate the maximum number of dofs (for one of the two dof_blocks) so that everything still fits into CPU RAM. From the storage provided (cpu_n_bytes), subtract the storage used for the temporary results(tmp_result_entropy and tmp_result_occupied_bins),
     // the storage for the minima, maxima and 1D entropy values as well as the 2D entroy values. What remains can be used for the two dof blocks, where each dof block needs ( dofs_per_block * n_frames * sizeof(PRECISION) ) bytes.     
-    dofs_per_block = ( cpu_n_bytes - gpu_dofs_per_block * gpu_dofs_per_block * ( sizeof(PRECISION) + sizeof(unsigned int) )  - (3 * n_dofs_total + n_dofs_total * ( n_dofs_total - 1 ) / 2) * sizeof(PRECISION) )
+    int dofs_per_block_tmp = ( cpu_n_bytes - gpu_dofs_per_block * gpu_dofs_per_block * ( sizeof(PRECISION) + sizeof(unsigned int) )  - (3 * n_dofs_total + n_dofs_total * ( n_dofs_total - 1 ) / 2) * sizeof(PRECISION) )
                    / double( 2 * n_frames * sizeof(PRECISION) );
+    if(dofs_per_block_tmp < 4){
+        cerr<<"ERROR: YOUR PROVIDED CPU RAM IS NOT EVEN SUFFICIENT TO HOLD 4 DEGREES OF FREEDOM. PLEASE PROVIDE MORE CPU RAM. ABORTING."<<endl;
+        exit(EXIT_FAILURE);
+    }
+    dofs_per_block = dofs_per_block_tmp;
     
     // if all dofs fit into RAM, still set up two blocks to be consistent with
     // the algorithm
@@ -684,12 +689,15 @@ public:
   }
 
   void calculate_block_pair_gpu(GPU_RAM_Block *block1, GPU_RAM_Block *block2) {
-        size_t bytes_to_zero = ram->gpu_ram_layout->dofs_per_block *ram->gpu_ram_layout->dofs_per_block*
+
+    size_t bytes_to_zero = ram->gpu_ram_layout->dofs_per_block;
+    bytes_to_zero *=
+        ram->gpu_ram_layout->dofs_per_block *
         (sizeof(PRECISION) +
          sizeof(unsigned int) *
              (n_bins * n_bins +
-              1)); 
-    gpuErrchk(cudaMemset(ram->gpu_ram_layout->result, 0, bytes_to_zero));
+              1));
+    gpuErrchk(cudaMemset(ram->gpu_ram_layout->histograms, 0, bytes_to_zero));
 
 
     for (unsigned int i = 0; i < block1->n_dofs; i++) {
@@ -812,7 +820,6 @@ public:
   }
 
   void calculate_block_gpu(GPU_RAM_Block *block) {
-    
     size_t bytes_to_zero = ram->gpu_ram_layout->dofs_per_block;
     bytes_to_zero *=
         ram->gpu_ram_layout->dofs_per_block *
@@ -820,7 +827,7 @@ public:
          sizeof(unsigned int) *
              (n_bins * n_bins +
               1));
-    gpuErrchk(cudaMemset(ram->gpu_ram_layout->result, 0, bytes_to_zero));
+    gpuErrchk(cudaMemset(ram->gpu_ram_layout->histograms, 0, bytes_to_zero));
   
 
     for (unsigned int i = 0; i < block->n_dofs - 1; i++) {
@@ -910,7 +917,6 @@ public:
         }
       }
     }
-
     gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaMemcpy(ram->cpu_ram_layout->tmp_result_entropy,
                          ram->gpu_ram_layout->result,
