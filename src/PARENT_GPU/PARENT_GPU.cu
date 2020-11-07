@@ -536,54 +536,57 @@ public:
 class PARENT_GPU {
 public:
   RAM *ram; // an object containing the CPU as well as the GPU RAM layout
-  unsigned int n_bins;
-  unsigned int n_frames;
-  unsigned int n_frames_padded;
-  Entropy_Matrix *ent_mat;
-  unsigned int n_dihedrals;
-  Bat *bat;
-    cudaStream_t streams[N_STREAMS];
+  unsigned int n_bins; // the number of bins used for building the histograms (for 2D histograms, n_bins^2 is used)
+  unsigned int n_frames; // the numberof frames in the trajectory
+  unsigned int n_frames_padded; // the padded number of frames. The padding is done to a multiple of 4 and used in the histo2D_shared_block kernel for efficient data loading
+  Entropy_Matrix *ent_mat; // the Entropy_Matrix used for I/O 
+  unsigned int n_dihedrals; // the number of dihedrals in the molecule(s)
+  Bat *bat; // a class mapping the bond-angle-torsion trajectory (torsion==dihedral)
+  cudaStream_t streams[N_STREAMS]; // an array of CUDA streams
 
   PARENT_GPU(size_t cpu_n_bytes,
              size_t gpu_n_bytes, char const *bat_str,
              unsigned int n_bins) {
-    this->n_bins = n_bins;
-
-    bat = new Bat(bat_str);
-
-    this->n_frames = bat->get_n_frames();
+    
+    this->n_bins = n_bins; // store the number of bins fro the calculation
+    bat = new Bat(bat_str); // map a Bat object to the .(g)bat file
+    this->n_frames = bat->get_n_frames(); // and get some parameters from it
     this->n_frames_padded = bat->get_n_frames_padded(4);
     this->n_dihedrals = bat->get_n_dihedrals();
 
-    ram = new RAM(cpu_n_bytes, gpu_n_bytes, bat, n_bins);
-    ent_mat = new Entropy_Matrix(bat_str, ram->cpu_ram_layout->result_entropy,
+    ram = new RAM(cpu_n_bytes, gpu_n_bytes, bat, n_bins); // create the GPU as well as CPU RAM Layout
+    ent_mat = new Entropy_Matrix(bat_str, ram->cpu_ram_layout->result_entropy, // create an Entropy_Matrix for I/O which is mapped to the already allocated RAM
                                  n_bins);
   }
 
-  void calculate_entropy() {
-    unsigned int skip = 0;
-    unsigned int skip_next = 0;
+  void calculate_entropy() { // the top-level method to calculate the entropy
+    
   
-    for (unsigned int i = 0; i < N_STREAMS; i++) {
+    for (unsigned int i = 0; i < N_STREAMS; i++) { // create CUDA streams
         cudaStreamCreate(streams + i);
     }
     gpuErrchk(cudaPeekAtLastError());
 
-    for (unsigned int i = 0; i < ram->blocks.size() - 1; i++) { //using this more complicated scheme, every but the first hard-dsik read is converted into a pair calculation
+    // Using the following more complicated scheme, every but the first hard-disk fetch is converted into a pair calculation.
+    // For 5 blocks, a simple scheme would calculate the block pairs in the order (0,1),(0,2),(0,3),(0,4),(1,2),(1,3),(1,4),(2,3),(2,4),(3,4). It takes two hard-disk fetches from (0,4) to (1,2) and from (1,4) to (2,3)
+    // The present scheme calculates the pairs like (0,1),(0,2),(0,3),(0,4),(1,4),(1,2),(1,3),(2,3),(2,4),(3,4)
+    unsigned int skip = 0;
+    unsigned int skip_next = 0;
+    for (unsigned int i = 0; i < ram->blocks.size() - 1; i++) { 
         skip = skip_next;
         if((skip!=0) && (i==skip)){
             cout << endl
            << "Deploying Block " << i + 2 << " (dofs "
-           << ram->blocks[i].dof_id_start_g << " to " << ram->blocks[i].dof_id_end_g
+           << ram->blocks[i+1].dof_id_start_g << " to " << ram->blocks[i+1].dof_id_end_g
            << ") to RAM bank 1."
            << endl;
-            ram->blocks[i+1].deploy(ram->cpu_ram_layout->dof_block_1);
+            ram->blocks[i+1].deploy(ram->cpu_ram_layout->dof_block_1); // minima, maxima and 1D entropy values are calculated during block deployment 
             
         cout<<"Calculating Block "<<skip + 1<<"."<<endl;
-            calculate_block_cpu(&(ram->blocks[skip]));
+            calculate_block_cpu(&(ram->blocks[skip])); // calculate the 2D entropy values in one block
         
         cout<<"Calculating Block pair "<<skip + 1<<" and "<<i+2<<"."<<endl;
-        calculate_block_pair_cpu(&(ram->blocks[skip]), &(ram->blocks[i+1]));
+        calculate_block_pair_cpu(&(ram->blocks[skip]), &(ram->blocks[i+1])); // calculate the 2D entropy values for the currently loaded block pair
             break;
         }
         else{
@@ -592,13 +595,13 @@ public:
            << ram->blocks[i].dof_id_start_g << " to " << ram->blocks[i].dof_id_end_g
            << ") to RAM bank 1."
            << endl;
-            ram->blocks[i].deploy(ram->cpu_ram_layout->dof_block_1);
+            ram->blocks[i].deploy(ram->cpu_ram_layout->dof_block_1); // minima, maxima and 1D entropy values are calculated during block deployment 
             cout<<"Calculating Block "<<i+1<<"."<<endl;
-            calculate_block_cpu(&(ram->blocks[i]));
+            calculate_block_cpu(&(ram->blocks[i])); // calculate the 2D entropy values in one block
         }
         
         if(skip != 0){
-            calculate_block_pair_cpu(&(ram->blocks[i]), &(ram->blocks[skip]));
+            calculate_block_pair_cpu(&(ram->blocks[i]), &(ram->blocks[skip])); // calculate the 2D entropy values for the currently loaded block pair
              cout<<"Calculating Block pair "<<i+1<<" and "<<skip+1<<"."<<endl;
         }
       for (unsigned int j = i + 1; j < ram->blocks.size(); j++) {
@@ -608,18 +611,18 @@ public:
                  << "Deploying Block " << j + 1 << " (dofs "
                  << ram->blocks[j].dof_id_start_g << " to "
                  << ram->blocks[j].dof_id_end_g << ") to RAM bank 2." << endl;
-            ram->blocks[j].deploy(ram->cpu_ram_layout->dof_block_2);
+            ram->blocks[j].deploy(ram->cpu_ram_layout->dof_block_2); // minima, maxima and 1D entropy values are calculated during block deployment 
             cout<<"Calculating Block pair "<<i+1<<" and "<<j+1<<"."<<endl;
-            calculate_block_pair_cpu(&(ram->blocks[i]), &(ram->blocks[j]));
+            calculate_block_pair_cpu(&(ram->blocks[i]), &(ram->blocks[j])); // calculate the 2D entropy values for the currently loaded block pair
             
         }
 
       }
     }
     cout<<"Calculating Block "<<ram->blocks.size()<<"."<<endl;
-    calculate_block_cpu(&(ram->blocks[ram->blocks.size() - 1]));
+    calculate_block_cpu(&(ram->blocks[ram->blocks.size() - 1])); // calculate the 2D entropy values in one block
     
-    for (unsigned int i = 0; i < N_STREAMS; i++) {
+    for (unsigned int i = 0; i < N_STREAMS; i++) { // destory the CUDA streams
         cudaStreamDestroy(streams[i]);
     }
     gpuErrchk(cudaPeekAtLastError());
