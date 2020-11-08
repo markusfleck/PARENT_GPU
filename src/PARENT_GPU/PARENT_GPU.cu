@@ -383,9 +383,13 @@ public:
   PRECISION *result; // the address of the 2D entropy entropy results
   unsigned int *occupied_bins; // the address of the result which stores the number of occupied bins in the histograms for Herzel entropy unbiasing
   unsigned int *histograms; // the address of the histograms to be build
+    unsigned int n_bins;
 
   GPU_RAM_Layout(unsigned int n_frames, unsigned int n_bins,
                  size_t gpu_n_bytes, unsigned int n_dofs_total) {
+                 
+    this -> n_bins = n_bins; // store the number of bins 
+                 
     // calculate the maximum number of dofs (for one of the two dof_blocks) so
     // that everything still fits into GPU RAM. The formula is:  gpu_n_bytes == 2 * dofs_per_block * n_frames * sizeof(PRECISION) + dofs_per_block^2 * ( (n_bins^2 + 1) * sizeof(unsigned int) + sizeof(PRECISION) )
     double a = 2 * n_frames * sizeof(PRECISION);
@@ -442,12 +446,16 @@ public:
   PRECISION *maxima; // The address of the maxima
   PRECISION *tmp_result_entropy; // The address for copying the entropy results from GPU to CPU RAM
   unsigned int *tmp_result_occupied_bins; // The address for copying the occupied_bins results from GPU to CPU RAM
+  unsigned int n_frames; // the number of frames in the trajectory
+  unsigned int n_dihedrals; // the number of dihedrals in the molecule(s)
 
   CPU_RAM_Layout(unsigned int n_frames, size_t cpu_n_bytes, unsigned int gpu_dofs_per_block,
                  unsigned int n_dihedrals) {
     unsigned int n_dofs_total = 3 * (n_dihedrals + 1); // == n_bonds + n_angles + n_dihedrals
     unsigned int n_bonds = n_dihedrals + 2;
     unsigned int n_angles = n_dihedrals + 1;
+    this->n_frames = n_frames;
+    this->n_dihedrals = n_dihedrals;
     
     // calculate the maximum number of dofs (for one of the two dof_blocks) so that everything still fits into CPU RAM. From the storage provided (cpu_n_bytes), subtract the storage used for the temporary results(tmp_result_entropy and tmp_result_occupied_bins),
     // the storage for the minima, maxima and 1D entropy values as well as the 2D entroy values. What remains can be used for the two dof blocks, where each dof block needs ( dofs_per_block * n_frames * sizeof(PRECISION) ) bytes.     
@@ -517,13 +525,388 @@ class GPU {
     public:
         int id;
         struct cudaDeviceProp property;
-        GPU_RAM_Layout* ram;
+        GPU_RAM_Layout* layout;
+        int state[2];
+        cudaStream_t streams[N_STREAMS]; // an array of CUDA streams
     GPU(int id, struct cudaDeviceProp property, unsigned int n_frames_padded, unsigned int n_bins, size_t n_bytes, unsigned int n_dofs_total, bool init_ram = false){
         this->id = id;
         this->property = property;
-        if(init_ram) ram = new GPU_RAM_Layout(n_frames_padded, n_bins, n_bytes, n_dofs_total); // create the RAM layout on the GPU 
+        if(init_ram) layout = new GPU_RAM_Layout(n_frames_padded, n_bins, n_bytes, n_dofs_total); // create the RAM layout on the GPU 
+        for (unsigned int i = 0; i < N_STREAMS; i++) { // create CUDA streams TODO: replace N_STREAMS with a check on the GPU properties and set the number accordingly
+            gpuErrchk( cudaStreamCreate(streams + i) );
+        }
+        gpuErrchk( cudaPeekAtLastError() );
     }
     
+};
+
+class Work{
+    vector< vector<int> > my_work;
+    Spin_Lock* spin_lock;
+    unsigned int n_frames, n_frames_padded;
+    Entropy_Matrix* ent_mat;
+    CPU_RAM_Layout* cpu_ram_layout;
+
+    public:
+        Work(){};
+        Work(unsigned int n_frames, unsigned int n_frames_padded, Entropy_Matrix* ent_mat, CPU_RAM_Layout* cpu_ram_layout){
+            this -> n_frames = n_frames;
+            this -> n_frames_padded = n_frames_padded;
+            this -> ent_mat = ent_mat;
+            this -> cpu_ram_layout = cpu_ram_layout;
+            spin_lock = new Spin_Lock;
+        }
+        void init(unsigned int n_frames, unsigned int n_frames_padded, Entropy_Matrix* ent_mat, CPU_RAM_Layout* cpu_ram_layout){
+            this -> n_frames = n_frames;
+            this -> n_frames_padded = n_frames_padded;
+            this -> ent_mat = ent_mat;
+            this -> cpu_ram_layout = cpu_ram_layout;
+            spin_lock = new Spin_Lock;
+        }
+        
+        void add_work(vector< vector<int> > work){
+            spin_lock->lock();
+                for(unsigned int i = 0; i < work.size(); i++) my_work.push_back(work[i]);
+            spin_lock->unlock();
+        }
+        
+        int get_work(int gpu_state[2], vector< vector<int> >* work){ // TODO: use gpu_state for cleverer work distribution/data fetching
+            spin_lock->lock();
+                if(my_work.size() == 0){
+                    spin_lock->unlock();
+                    return 0;
+                }
+                work->push_back(my_work.back());
+                my_work.pop_back();
+                //~ cout<<my_work.size()<<endl;
+            spin_lock->unlock();
+            return 1;
+        }
+        
+        void operator() (GPU* gpu, vector<GPU_RAM_Block>* blocks1, vector<GPU_RAM_Block>* blocks2){
+            vector< vector<int> > work; 
+            while( get_work(gpu->state, &work) ){
+                for(unsigned int i = 0; i < work.size(); i++){ // TODO: use gpu_state for cleverer data fetching
+                    if(work[i].size() == 1){
+                        GPU_RAM_Block tmp_block = (*blocks1)[work[i][0]]; // copy the block for thread safety //TODO: WARNING: Check if this works correctly
+                        deploy(&tmp_block, gpu->id, gpu->layout->dof_block_1); // TODO: use gpu_state for cleverer data fetching
+                        calculate_block_gpu(gpu, cpu_ram_layout, &tmp_block);
+                    }
+                    if(work[i].size() == 2){
+                        GPU_RAM_Block tmp_block1 = (*blocks1)[work[i][0]]; // copy the blocks for thread safety //TODO: WARNING: Check if this works correctly
+                        GPU_RAM_Block tmp_block2 = (*blocks2)[work[i][1]];
+                        deploy(&tmp_block1, gpu->id, gpu->layout->dof_block_1); // TODO: use gpu_state for cleverer data fetching
+                        deploy(&tmp_block2, gpu->id, gpu->layout->dof_block_2); // TODO: use gpu_state for cleverer data fetching
+                        calculate_block_pair_gpu(gpu, cpu_ram_layout, &tmp_block1, &tmp_block2);
+                    }
+                }
+                work.clear();
+            }
+        }
+        
+        void deploy(GPU_RAM_Block *block, int gpu_id, PRECISION* gpu_ram_start){
+            spin_lock->lock();
+                gpuErrchk( cudaSetDevice(gpu_id) );
+                block -> deploy(gpu_ram_start);
+            spin_lock->unlock();
+        }
+        
+        unsigned char get_pair_type(unsigned char type1, unsigned char type2) {
+            if ((type1 == TYPE_B) || (type2 == TYPE_B)) {
+                return type1 + type2;
+            } 
+            else {
+                return type1 + type2 + 1;
+            }
+        }
+        
+      void calculate_block_pair_gpu(GPU* gpu, CPU_RAM_Layout* cpu_ram_layout, GPU_RAM_Block *block1, GPU_RAM_Block *block2) {
+
+        size_t bytes_to_zero = gpu->layout->dofs_per_block;
+        bytes_to_zero *=
+            gpu->layout->dofs_per_block *
+            (sizeof(PRECISION) +
+             sizeof(unsigned int) *
+                 (gpu->layout->n_bins * gpu->layout->n_bins +
+                  1));
+      
+        spin_lock->lock();
+            gpuErrchk( cudaSetDevice(gpu->id) );
+            gpuErrchk( cudaMemset(gpu->layout->histograms, 0, bytes_to_zero) );
+        spin_lock->unlock();
+
+        for (unsigned int i = 0; i < block1->n_dofs; i++) {
+          for (unsigned int j = 0; j < block2->n_dofs; j++) {
+            
+            unsigned int dof1_g = i + block1->dof_id_start_g;
+            unsigned int dof2_g = j + block2->dof_id_start_g;
+            PRECISION min1 = cpu_ram_layout->minima[dof1_g];
+            PRECISION min2 = cpu_ram_layout->minima[dof2_g];
+
+            PRECISION bin_size1 =
+                (cpu_ram_layout->maxima[dof1_g] - min1) / gpu->layout->n_bins;
+            PRECISION bin_size2 =
+                (cpu_ram_layout->maxima[dof2_g] - min2) / gpu->layout->n_bins;
+            unsigned int *histogram = gpu->layout->histograms +
+                                      (i * block2->n_dofs + j) * gpu->layout->n_bins * gpu->layout->n_bins;
+            
+            int blocks = (n_frames + (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE - 1) ) / (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE);
+            spin_lock->lock(); //TODO: check if putting the lock across the whole double loop is faster
+                gpuErrchk( cudaSetDevice(gpu->id) );
+                #ifdef USE_SHARED_MEM_HISTOGRAMS
+                histo2D_shared_block<<<blocks, HISTOGRAM_THREADS, gpu->layout->n_bins * gpu->layout->n_bins * sizeof(unsigned int), gpu->streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(
+                #else
+                histo2D<<<blocks, HISTOGRAM_THREADS, 0, gpu->streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(
+                #endif
+                    block1->gpu_ram_start + i * n_frames_padded,
+                    block2->gpu_ram_start + j * n_frames_padded, n_frames, histogram, gpu->layout->n_bins,
+                    bin_size1, bin_size2, min1, min2);
+            spin_lock->unlock();
+          }
+        }
+        //gpuErrchk(cudaPeekAtLastError());
+        //gpuErrchk(cudaDeviceSynchronize());
+        //for (unsigned int i = 0; i < N_STREAMS; i++) {
+        //    cudaStreamDestroy(gpu->streams[i]);
+        //}
+        //gpuErrchk(cudaPeekAtLastError());
+        
+
+        for (unsigned int i = 0; i < block1->n_dofs; i++) {
+          for (unsigned int j = 0; j < block2->n_dofs; j++) {
+            unsigned int dof1_g = i + block1->dof_id_start_g;
+            unsigned int dof2_g = j + block2->dof_id_start_g;
+            PRECISION min1 = cpu_ram_layout->minima[dof1_g];
+            PRECISION min2 = cpu_ram_layout->minima[dof2_g];
+
+            PRECISION bin_size1 =
+                (cpu_ram_layout->maxima[dof1_g] - min1) / gpu->layout->n_bins;
+            PRECISION bin_size2 =
+                (cpu_ram_layout->maxima[dof2_g] - min2) / gpu->layout->n_bins;
+
+            unsigned int *histogram = gpu->layout->histograms +
+                                      (i * block2->n_dofs + j) * gpu->layout->n_bins * gpu->layout->n_bins;
+            PRECISION *plnpsum =
+                gpu->layout->result + i * block2->n_dofs + j;
+            unsigned int *occupbins =
+                gpu->layout->occupied_bins + i * block2->n_dofs + j;
+            int blocks = (gpu->layout->n_bins * gpu->layout->n_bins + (PLNP_THREADS - 1) ) / PLNP_THREADS;
+            
+            spin_lock->lock(); //TODO: check if putting the lock across the whole double loop is faster
+                gpuErrchk( cudaSetDevice(gpu->id) );
+                switch (get_pair_type(block1->type, block2->type)) {
+                case (TYPE_BB):
+                  cu_bbEnt<<<blocks, PLNP_THREADS, 0, gpu->streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, gpu->layout->n_bins,
+                                                          bin_size1, bin_size2, min1,
+                                                          min2, plnpsum, occupbins);
+                  break;
+                case (TYPE_BA):
+                  cu_baEnt<<<blocks, PLNP_THREADS, 0, gpu->streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(
+                      histogram, n_frames, gpu->layout->n_bins, gpu->layout->n_bins, bin_size1, bin_size2, min1,
+                      min2, plnpsum, occupbins);
+                  break;
+                case (TYPE_BD):
+                  cu_bdEnt<<<blocks, PLNP_THREADS, 0, gpu->streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, gpu->layout->n_bins,
+                                                          gpu->layout->n_bins, bin_size1, bin_size2,
+                                                          min1, plnpsum, occupbins);
+                  break;
+                case (TYPE_AA):
+                  cu_aaEnt<<<blocks, PLNP_THREADS, 0, gpu->streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, gpu->layout->n_bins,
+                                                          bin_size1, bin_size2, min1,
+                                                          min2, plnpsum, occupbins);
+                  break;
+                case (TYPE_AD):
+                  cu_adEnt<<<blocks, PLNP_THREADS, 0, gpu->streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, gpu->layout->n_bins,
+                                                          gpu->layout->n_bins, bin_size1, bin_size2,
+                                                          min1, plnpsum, occupbins);
+                  break;
+                case (TYPE_DD):
+                  cu_ddEnt<<<blocks, PLNP_THREADS, 0, gpu->streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, gpu->layout->n_bins,
+                                                          bin_size1, bin_size2, plnpsum,
+                                                          occupbins);
+                  break;
+                }
+            spin_lock->unlock();
+          }
+        }
+        spin_lock->lock();
+            gpuErrchk( cudaSetDevice(gpu->id) );
+            gpuErrchk( cudaPeekAtLastError() );
+            gpuErrchk( cudaDeviceSynchronize() );
+        
+            gpuErrchk(cudaMemcpy(cpu_ram_layout->tmp_result_entropy,
+                                 gpu->layout->result,
+                                 block1->n_dofs * block2->n_dofs * sizeof(PRECISION),
+                                 cudaMemcpyDeviceToHost));
+            gpuErrchk(cudaMemcpy(cpu_ram_layout->tmp_result_occupied_bins,
+                                 gpu->layout->occupied_bins,
+                                 block1->n_dofs * block2->n_dofs * sizeof(unsigned int),
+                                 cudaMemcpyDeviceToHost));
+        spin_lock->unlock();
+        
+
+        for (unsigned int i = 0; i < block1->n_dofs; i++) {
+          for (unsigned int j = 0; j < block2->n_dofs; j++) {
+            unsigned int dof1_gt = i + block1->dof_id_start_g -
+                                get_min_id_for_type(block1->type, cpu_ram_layout->n_dihedrals);
+            unsigned int dof2_gt = j + block2->dof_id_start_g -
+                                get_min_id_for_type(block2->type, cpu_ram_layout->n_dihedrals);
+            double entropy =
+                -cpu_ram_layout->tmp_result_entropy[i * block2->n_dofs + j] +
+                (cpu_ram_layout
+                     ->tmp_result_occupied_bins[i * block2->n_dofs + j] -
+                 1.0) /
+                    (2.0 * n_frames);
+            spin_lock->lock();//TODO: check if putting the lock across the whole double loop is faster
+                ent_mat->set2DEntropy(block1->type, block2->type, dof1_gt + 1, dof2_gt + 1,
+                                  entropy);
+            spin_lock->unlock();
+          }
+        }
+      }
+
+      void calculate_block_gpu(GPU* gpu, CPU_RAM_Layout* cpu_ram_layout, GPU_RAM_Block *block) {
+        size_t bytes_to_zero = gpu->layout->dofs_per_block;
+        bytes_to_zero *=
+            gpu->layout->dofs_per_block *
+            (sizeof(PRECISION) +
+             sizeof(unsigned int) *
+                 (gpu->layout->n_bins * gpu->layout->n_bins +
+                  1));
+        spin_lock->lock();
+            gpuErrchk( cudaSetDevice(gpu->id) );
+            gpuErrchk( cudaMemset(gpu->layout->histograms, 0, bytes_to_zero) );
+        spin_lock->unlock();
+
+        for (unsigned int i = 0; i < block->n_dofs - 1; i++) {
+          for (unsigned int j = i + 1; j < block->n_dofs; j++) {
+            unsigned int dof1_g = i + block->dof_id_start_g;
+            unsigned int dof2_g = j + block->dof_id_start_g;
+            PRECISION min1 = cpu_ram_layout->minima[dof1_g];
+            PRECISION min2 = cpu_ram_layout->minima[dof2_g];
+
+            PRECISION bin_size1 =
+                (cpu_ram_layout->maxima[dof1_g] - min1) / gpu->layout->n_bins;
+            PRECISION bin_size2 =
+                (cpu_ram_layout->maxima[dof2_g] - min2) / gpu->layout->n_bins;
+            unsigned int *histogram = gpu->layout->histograms +
+                                      (i * block->n_dofs + j) * gpu->layout->n_bins * gpu->layout->n_bins;
+          
+            int blocks = (n_frames + (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE - 1) ) / (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE);
+            
+            spin_lock->lock(); //TODO: check if putting the lock across the whole double loop is faster
+                gpuErrchk( cudaSetDevice(gpu->id) );
+                #ifdef USE_SHARED_MEM_HISTOGRAMS
+                histo2D_shared_block<<<blocks, HISTOGRAM_THREADS, gpu->layout->n_bins * gpu->layout->n_bins * sizeof(unsigned int), gpu->streams[(i * block->n_dofs + j) % N_STREAMS]>>>(
+                #else
+                histo2D<<<blocks, HISTOGRAM_THREADS, 0, gpu->streams[(i * block->n_dofs + j) % N_STREAMS]>>>(
+                #endif
+                    block->gpu_ram_start + i * n_frames_padded,
+                    block->gpu_ram_start + j * n_frames_padded, n_frames, histogram, gpu->layout->n_bins,
+                    bin_size1, bin_size2, min1, min2);
+            spin_lock->unlock();
+          }
+        }
+        //gpuErrchk(cudaPeekAtLastError());
+        //gpuErrchk(cudaDeviceSynchronize());
+        //for (unsigned int i = 0; i < N_STREAMS; i++) {
+        //    cudaStreamDestroy(gpu->streams[i]);
+        //}
+        //gpuErrchk(cudaPeekAtLastError());
+
+
+        for (unsigned int i = 0; i < block->n_dofs - 1; i++) {
+          for (unsigned int j = i + 1; j < block->n_dofs; j++) {
+            unsigned int dof1_g = i + block->dof_id_start_g;
+            unsigned int dof2_g = j + block->dof_id_start_g;
+            PRECISION min1 = cpu_ram_layout->minima[dof1_g];
+            PRECISION min2 = cpu_ram_layout->minima[dof2_g];
+
+            PRECISION bin_size1 =
+                (cpu_ram_layout->maxima[dof1_g] - min1) / gpu->layout->n_bins;
+            PRECISION bin_size2 =
+                (cpu_ram_layout->maxima[dof2_g] - min2) / gpu->layout->n_bins;
+
+            unsigned int *histogram = gpu->layout->histograms +
+                                      (i * block->n_dofs + j) * gpu->layout->n_bins * gpu->layout->n_bins;
+            PRECISION *plnpsum =
+                gpu->layout->result + i * block->n_dofs + j;
+            unsigned int *occupbins =
+                gpu->layout->occupied_bins + i * block->n_dofs + j;
+            int blocks = (gpu->layout->n_bins * gpu->layout->n_bins + (PLNP_THREADS - 1) ) / PLNP_THREADS;
+            
+          
+            spin_lock->lock(); //TODO: check if putting the lock across the whole double loop is faster
+                gpuErrchk( cudaSetDevice(gpu->id) );
+                switch (get_pair_type(block->type, block->type)) {
+                case (TYPE_BB):
+                  cu_bbEnt<<<blocks, PLNP_THREADS, 0, gpu->streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, gpu->layout->n_bins,
+                                                          bin_size1, bin_size2, min1,
+                                                          min2, plnpsum, occupbins);
+                  break;
+                case (TYPE_BA):
+                  cu_baEnt<<<blocks, PLNP_THREADS, 0, gpu->streams[(i * block->n_dofs + j) % N_STREAMS]>>>(
+                      histogram, n_frames, gpu->layout->n_bins, gpu->layout->n_bins, bin_size1, bin_size2, min1,
+                      min2, plnpsum, occupbins);
+                  break;
+                case (TYPE_BD):
+                  cu_bdEnt<<<blocks, PLNP_THREADS, 0, gpu->streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, gpu->layout->n_bins,
+                                                          gpu->layout->n_bins, bin_size1, bin_size2,
+                                                          min1, plnpsum, occupbins);
+                  break;
+                case (TYPE_AA):
+                  cu_aaEnt<<<blocks, PLNP_THREADS, 0, gpu->streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, gpu->layout->n_bins,
+                                                          bin_size1, bin_size2, min1,
+                                                          min2, plnpsum, occupbins);
+                  break;
+                case (TYPE_AD):
+                  cu_adEnt<<<blocks, PLNP_THREADS, 0, gpu->streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, gpu->layout->n_bins,
+                                                          gpu->layout->n_bins, bin_size1, bin_size2,
+                                                          min1, plnpsum, occupbins);
+                  break;
+                case (TYPE_DD):
+                  cu_ddEnt<<<blocks, PLNP_THREADS, 0, gpu->streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, gpu->layout->n_bins,
+                                                          bin_size1, bin_size2, plnpsum,
+                                                          occupbins);
+                  break;
+                }
+            spin_lock->unlock();
+          }
+        }
+        spin_lock->lock();
+            gpuErrchk( cudaSetDevice(gpu->id) );
+            gpuErrchk(cudaPeekAtLastError());
+            gpuErrchk(cudaMemcpy(cpu_ram_layout->tmp_result_entropy,
+                                 gpu->layout->result,
+                                 block->n_dofs * block->n_dofs * sizeof(PRECISION),
+                                 cudaMemcpyDeviceToHost));
+            gpuErrchk(cudaMemcpy(cpu_ram_layout->tmp_result_occupied_bins,
+                                 gpu->layout->occupied_bins,
+                                 block->n_dofs * block->n_dofs * sizeof(unsigned int),
+                                 cudaMemcpyDeviceToHost));
+        spin_lock->unlock();
+        
+
+        for (unsigned int i = 0; i < block->n_dofs - 1; i++) {
+          for (unsigned int j = i + 1; j < block->n_dofs; j++) {
+            unsigned int dof1_gt = i + block->dof_id_start_g -
+                                get_min_id_for_type(block->type, cpu_ram_layout->n_dihedrals);
+            unsigned int dof2_gt = j + block->dof_id_start_g -
+                                get_min_id_for_type(block->type, cpu_ram_layout->n_dihedrals);
+            double entropy =
+                -cpu_ram_layout->tmp_result_entropy[i * block->n_dofs + j] +
+                (cpu_ram_layout
+                     ->tmp_result_occupied_bins[i * block->n_dofs + j] -
+                 1.0) /
+                    (2.0 * n_frames); // includes Herzel entropy unbiasing
+            spin_lock->lock(); //TODO: check if putting the lock across the whole double loop is faster
+                gpuErrchk( cudaSetDevice(gpu->id) );
+                ent_mat->set2DEntropy(block->type, block->type, dof1_gt + 1, dof2_gt + 1,
+                                  entropy);
+            spin_lock->unlock();
+          }
+        }
+      }
 };
 
 class GPU_Ensemble {
@@ -597,6 +980,7 @@ public:
   unsigned int n_dihedrals; // the number of dihedrals of the molecule(s)
   unsigned int n_dofs_total; // the total number of degrees of freedom
   vector<CPU_RAM_Block> blocks; // a vector holding all the CPU_RAM_Blocks to be deployed to the two RAM banks
+    GPU_Ensemble* my_gpus;
 
   RAM(size_t cpu_n_bytes, size_t gpu_n_bytes,
       Bat *bat, unsigned int n_bins) {
@@ -604,8 +988,8 @@ public:
     this->n_dihedrals = bat->get_n_dihedrals(); // get the number of dihedrals from the .(g)bat file
     this->n_dofs_total = 3 * (n_dihedrals + 1); // calculate the total number number of degrees of freedom from the number of dihedrals 
       
-    GPU_Ensemble mygpus = *new GPU_Ensemble(bat->get_n_frames_padded(4), n_bins, gpu_n_bytes, n_dofs_total);
-    mygpus.report(false);
+    my_gpus = new GPU_Ensemble(bat->get_n_frames_padded(4), n_bins, gpu_n_bytes, n_dofs_total);
+    my_gpus->report(false);
 
     gpu_ram_layout = new GPU_RAM_Layout(bat->get_n_frames_padded(4), n_bins,
                                         gpu_n_bytes, n_dofs_total); // create the RAM layout on the GPU 
@@ -636,6 +1020,7 @@ public:
   }
 };
 
+
 // This class orchestrates the whole entropy calculation
 class PARENT_GPU {
 public:
@@ -647,6 +1032,7 @@ public:
   unsigned int n_dihedrals; // the number of dihedrals in the molecule(s)
   Bat *bat; // a class mapping the bond-angle-torsion trajectory (torsion==dihedral)
   cudaStream_t streams[N_STREAMS]; // an array of CUDA streams
+    Work work;
 
   PARENT_GPU(size_t cpu_n_bytes,
              size_t gpu_n_bytes, char const *bat_str,
@@ -661,6 +1047,8 @@ public:
     ram = new RAM(cpu_n_bytes, gpu_n_bytes, bat, n_bins); // create the GPU as well as CPU RAM Layout
     ent_mat = new Entropy_Matrix(bat_str, ram->cpu_ram_layout->result_entropy, // create an Entropy_Matrix for I/O which is mapped to the already allocated RAM
                                  n_bins);
+             
+    work.init(n_frames, n_frames_padded, ent_mat, ram->cpu_ram_layout); // initialize the object for performing the work, as it was created with the default constructor
   }
 
   void calculate_entropy() { // the top-level method to calculate the entropy
@@ -733,16 +1121,34 @@ public:
   }
 
   void calculate_block_pair_cpu(CPU_RAM_Block *block1, CPU_RAM_Block *block2) {
+    vector< vector<int> > tmp_work;
+    vector<int> tmp_task;
     for (unsigned int k = 0; k < block1->blocks.size(); k++) {
-        block1->blocks[k].deploy(ram->gpu_ram_layout->dof_block_1);
+        //~ block1->blocks[k].deploy(ram->gpu_ram_layout->dof_block_1);
       for (unsigned int l = 0; l < block2->blocks.size(); l++) {
-        block2->blocks[l].deploy(ram->gpu_ram_layout->dof_block_2);
-        calculate_block_pair_gpu(&(block1->blocks[k]), &(block2->blocks[l]));
+        //~ block2->blocks[l].deploy(ram->gpu_ram_layout->dof_block_2);
+        //~ calculate_block_pair_gpu(&(block1->blocks[k]), &(block2->blocks[l]));
+        tmp_task.clear();
+        tmp_task.push_back(k);
+        tmp_task.push_back(l);
+        tmp_work.push_back(tmp_task);
       }
+    }
+    work.add_work(tmp_work);
+    vector<thread> threads;
+    
+    for(unsigned int i = 0; i < ram->my_gpus->gpus.size(); i++){
+        threads.push_back(thread(work,&(ram->my_gpus->gpus[i]), &(block1->blocks), &(block2->blocks)));
+    }
+    for(unsigned int i = 0; i < threads.size(); i++){
+        threads[i].join();
     }
   }
 
   void calculate_block_cpu(CPU_RAM_Block *block) { //play the same game as for the hard-disk loads in calculate_entropy() 
+    vector< vector<int> > tmp_work;
+    vector<int> tmp_task;
+  
   //TODO:does not yield significant performance gains, maybe revert for clearer code
     unsigned int skip = 0;
     unsigned int skip_next = 0;
@@ -750,296 +1156,326 @@ public:
     for (unsigned int i = 0; i < block->blocks.size() - 1; i++) {
         skip = skip_next;
         if((skip!=0) && (i==skip)){
-            block->blocks[i+1].deploy(ram->gpu_ram_layout->dof_block_1);
-            calculate_block_gpu(&(block->blocks[skip]));
-            calculate_block_pair_gpu(&(block->blocks[skip]), &(block->blocks[i+1]));
+            //~ block->blocks[i+1].deploy(ram->gpu_ram_layout->dof_block_1);
+            //~ calculate_block_gpu(&(block->blocks[skip]));
+            //~ calculate_block_pair_gpu(&(block->blocks[skip]), &(block->blocks[i+1]));
+            tmp_task.clear();
+            tmp_task.push_back(skip);
+            tmp_work.push_back(tmp_task);
+            tmp_task.push_back(i+1);
+            tmp_work.push_back(tmp_task);
+        
             break;
         }
         else{
-            block->blocks[i].deploy(ram->gpu_ram_layout->dof_block_1);
-            calculate_block_gpu(&(block->blocks[i]));
+            //~ block->blocks[i].deploy(ram->gpu_ram_layout->dof_block_1);
+            //~ calculate_block_gpu(&(block->blocks[i]));
+            tmp_task.clear();
+            tmp_task.push_back(i);
+            tmp_work.push_back(tmp_task);
         }
         if(skip != 0){
-            block->blocks[i].deploy(ram->gpu_ram_layout->dof_block_1);
-            calculate_block_pair_gpu(&(block->blocks[i]), &(block->blocks[skip]));
+            //~ block->blocks[i].deploy(ram->gpu_ram_layout->dof_block_1);
+            //~ calculate_block_pair_gpu(&(block->blocks[i]), &(block->blocks[skip]));
+            tmp_task.clear();
+            tmp_task.push_back(i);
+            tmp_task.push_back(skip);
+            tmp_work.push_back(tmp_task);
         }
         for (unsigned int j = i + 1; j < block->blocks.size(); j++) {
             if(skip != j){
                 skip_next = j;
-                block->blocks[j].deploy(ram->gpu_ram_layout->dof_block_2);
-                calculate_block_pair_gpu(&(block->blocks[i]), &(block->blocks[j]));
+                //~ block->blocks[j].deploy(ram->gpu_ram_layout->dof_block_2);
+                //~ calculate_block_pair_gpu(&(block->blocks[i]), &(block->blocks[j]));
+                tmp_task.clear();
+                tmp_task.push_back(i);
+                tmp_task.push_back(j);
+                tmp_work.push_back(tmp_task);
             }
         }
     }
-    if(block->blocks.size() == 1) block->blocks[0].deploy(ram->gpu_ram_layout->dof_block_1); // if there is only one GPU_RAM_Block, the loop above never gets executed, so this single GPU_RAM_Block needs to be deployed here
-    calculate_block_gpu(&(block->blocks[block->blocks.size() - 1]));
-  }
-
-  unsigned char get_pair_type(unsigned char type1, unsigned char type2) {
-    if ((type1 == TYPE_B) || (type2 == TYPE_B)) {
-      return type1 + type2;
-    } else {
-      return type1 + type2 + 1;
+    //~ if(block->blocks.size() == 1) block->blocks[0].deploy(ram->gpu_ram_layout->dof_block_1); // if there is only one GPU_RAM_Block, the loop above never gets executed, so this single GPU_RAM_Block needs to be deployed here
+    //~ calculate_block_gpu(&(block->blocks[block->blocks.size() - 1]));
+    tmp_task.clear();
+    tmp_task.push_back(block->blocks.size() - 1);
+    tmp_work.push_back(tmp_task);
+    
+    work.add_work(tmp_work);
+    vector<thread> threads;
+    
+    for(unsigned int i = 0; i < ram->my_gpus->gpus.size(); i++){
+        threads.push_back(thread(work,&(ram->my_gpus->gpus[i]), &(block->blocks), &(block->blocks)));
+    }
+    for(unsigned int i = 0; i < threads.size(); i++){
+        threads[i].join();
     }
   }
 
-  void calculate_block_pair_gpu(GPU_RAM_Block *block1, GPU_RAM_Block *block2) {
+  //~ unsigned char get_pair_type(unsigned char type1, unsigned char type2) {
+    //~ if ((type1 == TYPE_B) || (type2 == TYPE_B)) {
+      //~ return type1 + type2;
+    //~ } else {
+      //~ return type1 + type2 + 1;
+    //~ }
+  //~ }
 
-    size_t bytes_to_zero = ram->gpu_ram_layout->dofs_per_block;
-    bytes_to_zero *=
-        ram->gpu_ram_layout->dofs_per_block *
-        (sizeof(PRECISION) +
-         sizeof(unsigned int) *
-             (n_bins * n_bins +
-              1));
-    gpuErrchk(cudaMemset(ram->gpu_ram_layout->histograms, 0, bytes_to_zero));
+  //~ void calculate_block_pair_gpu(GPU_RAM_Block *block1, GPU_RAM_Block *block2) {
+
+    //~ size_t bytes_to_zero = ram->gpu_ram_layout->dofs_per_block;
+    //~ bytes_to_zero *=
+        //~ ram->gpu_ram_layout->dofs_per_block *
+        //~ (sizeof(PRECISION) +
+         //~ sizeof(unsigned int) *
+             //~ (n_bins * n_bins +
+              //~ 1));
+    //~ gpuErrchk(cudaMemset(ram->gpu_ram_layout->histograms, 0, bytes_to_zero));
 
 
-    for (unsigned int i = 0; i < block1->n_dofs; i++) {
-      for (unsigned int j = 0; j < block2->n_dofs; j++) {
+    //~ for (unsigned int i = 0; i < block1->n_dofs; i++) {
+      //~ for (unsigned int j = 0; j < block2->n_dofs; j++) {
         
-        unsigned int dof1_g = i + block1->dof_id_start_g;
-        unsigned int dof2_g = j + block2->dof_id_start_g;
-        PRECISION min1 = ram->cpu_ram_layout->minima[dof1_g];
-        PRECISION min2 = ram->cpu_ram_layout->minima[dof2_g];
+        //~ unsigned int dof1_g = i + block1->dof_id_start_g;
+        //~ unsigned int dof2_g = j + block2->dof_id_start_g;
+        //~ PRECISION min1 = ram->cpu_ram_layout->minima[dof1_g];
+        //~ PRECISION min2 = ram->cpu_ram_layout->minima[dof2_g];
 
-        PRECISION bin_size1 =
-            (ram->cpu_ram_layout->maxima[dof1_g] - min1) / n_bins;
-        PRECISION bin_size2 =
-            (ram->cpu_ram_layout->maxima[dof2_g] - min2) / n_bins;
-        unsigned int *histogram = ram->gpu_ram_layout->histograms +
-                                  (i * block2->n_dofs + j) * n_bins * n_bins;
+        //~ PRECISION bin_size1 =
+            //~ (ram->cpu_ram_layout->maxima[dof1_g] - min1) / n_bins;
+        //~ PRECISION bin_size2 =
+            //~ (ram->cpu_ram_layout->maxima[dof2_g] - min2) / n_bins;
+        //~ unsigned int *histogram = ram->gpu_ram_layout->histograms +
+                                  //~ (i * block2->n_dofs + j) * n_bins * n_bins;
         
-        int blocks = (n_frames + (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE - 1) ) / (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE);
-        #ifdef USE_SHARED_MEM_HISTOGRAMS
-        histo2D_shared_block<<<blocks, HISTOGRAM_THREADS, n_bins * n_bins * sizeof(unsigned int), streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(
-        #else
-        histo2D<<<blocks, HISTOGRAM_THREADS, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(
-        #endif
-            block1->gpu_ram_start + i * n_frames_padded,
-            block2->gpu_ram_start + j * n_frames_padded, n_frames, histogram, n_bins,
-            bin_size1, bin_size2, min1, min2);
-      }
-    }
-    //gpuErrchk(cudaPeekAtLastError());
-    //gpuErrchk(cudaDeviceSynchronize());
-    //for (unsigned int i = 0; i < N_STREAMS; i++) {
-    //    cudaStreamDestroy(streams[i]);
-    //}
-    //gpuErrchk(cudaPeekAtLastError());
+        //~ int blocks = (n_frames + (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE - 1) ) / (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE);
+        //~ #ifdef USE_SHARED_MEM_HISTOGRAMS
+        //~ histo2D_shared_block<<<blocks, HISTOGRAM_THREADS, n_bins * n_bins * sizeof(unsigned int), streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(
+        //~ #else
+        //~ histo2D<<<blocks, HISTOGRAM_THREADS, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(
+        //~ #endif
+            //~ block1->gpu_ram_start + i * n_frames_padded,
+            //~ block2->gpu_ram_start + j * n_frames_padded, n_frames, histogram, n_bins,
+            //~ bin_size1, bin_size2, min1, min2);
+      //~ }
+    //~ }
+    //~ //gpuErrchk(cudaPeekAtLastError());
+    //~ //gpuErrchk(cudaDeviceSynchronize());
+    //~ //for (unsigned int i = 0; i < N_STREAMS; i++) {
+    //~ //    cudaStreamDestroy(streams[i]);
+    //~ //}
+    //~ //gpuErrchk(cudaPeekAtLastError());
     
 
-    for (unsigned int i = 0; i < block1->n_dofs; i++) {
-      for (unsigned int j = 0; j < block2->n_dofs; j++) {
-        unsigned int dof1_g = i + block1->dof_id_start_g;
-        unsigned int dof2_g = j + block2->dof_id_start_g;
-        PRECISION min1 = ram->cpu_ram_layout->minima[dof1_g];
-        PRECISION min2 = ram->cpu_ram_layout->minima[dof2_g];
+    //~ for (unsigned int i = 0; i < block1->n_dofs; i++) {
+      //~ for (unsigned int j = 0; j < block2->n_dofs; j++) {
+        //~ unsigned int dof1_g = i + block1->dof_id_start_g;
+        //~ unsigned int dof2_g = j + block2->dof_id_start_g;
+        //~ PRECISION min1 = ram->cpu_ram_layout->minima[dof1_g];
+        //~ PRECISION min2 = ram->cpu_ram_layout->minima[dof2_g];
 
-        PRECISION bin_size1 =
-            (ram->cpu_ram_layout->maxima[dof1_g] - min1) / n_bins;
-        PRECISION bin_size2 =
-            (ram->cpu_ram_layout->maxima[dof2_g] - min2) / n_bins;
+        //~ PRECISION bin_size1 =
+            //~ (ram->cpu_ram_layout->maxima[dof1_g] - min1) / n_bins;
+        //~ PRECISION bin_size2 =
+            //~ (ram->cpu_ram_layout->maxima[dof2_g] - min2) / n_bins;
 
-        unsigned int *histogram = ram->gpu_ram_layout->histograms +
-                                  (i * block2->n_dofs + j) * n_bins * n_bins;
-        PRECISION *plnpsum =
-            ram->gpu_ram_layout->result + i * block2->n_dofs + j;
-        unsigned int *occupbins =
-            ram->gpu_ram_layout->occupied_bins + i * block2->n_dofs + j;
-        int blocks = (n_bins * n_bins + (PLNP_THREADS - 1) ) / PLNP_THREADS;
+        //~ unsigned int *histogram = ram->gpu_ram_layout->histograms +
+                                  //~ (i * block2->n_dofs + j) * n_bins * n_bins;
+        //~ PRECISION *plnpsum =
+            //~ ram->gpu_ram_layout->result + i * block2->n_dofs + j;
+        //~ unsigned int *occupbins =
+            //~ ram->gpu_ram_layout->occupied_bins + i * block2->n_dofs + j;
+        //~ int blocks = (n_bins * n_bins + (PLNP_THREADS - 1) ) / PLNP_THREADS;
 
-        switch (get_pair_type(block1->type, block2->type)) {
-        case (TYPE_BB):
-          cu_bbEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
-                                                  bin_size1, bin_size2, min1,
-                                                  min2, plnpsum, occupbins);
-          break;
-        case (TYPE_BA):
-          cu_baEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(
-              histogram, n_frames, n_bins, n_bins, bin_size1, bin_size2, min1,
-              min2, plnpsum, occupbins);
-          break;
-        case (TYPE_BD):
-          cu_bdEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
-                                                  n_bins, bin_size1, bin_size2,
-                                                  min1, plnpsum, occupbins);
-          break;
-        case (TYPE_AA):
-          cu_aaEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
-                                                  bin_size1, bin_size2, min1,
-                                                  min2, plnpsum, occupbins);
-          break;
-        case (TYPE_AD):
-          cu_adEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
-                                                  n_bins, bin_size1, bin_size2,
-                                                  min1, plnpsum, occupbins);
-          break;
-        case (TYPE_DD):
-          cu_ddEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
-                                                  bin_size1, bin_size2, plnpsum,
-                                                  occupbins);
-          break;
-        }
-      }
-    }
-    gpuErrchk(cudaPeekAtLastError());
-    gpuErrchk(cudaDeviceSynchronize());
+        //~ switch (get_pair_type(block1->type, block2->type)) {
+        //~ case (TYPE_BB):
+          //~ cu_bbEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
+                                                  //~ bin_size1, bin_size2, min1,
+                                                  //~ min2, plnpsum, occupbins);
+          //~ break;
+        //~ case (TYPE_BA):
+          //~ cu_baEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(
+              //~ histogram, n_frames, n_bins, n_bins, bin_size1, bin_size2, min1,
+              //~ min2, plnpsum, occupbins);
+          //~ break;
+        //~ case (TYPE_BD):
+          //~ cu_bdEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
+                                                  //~ n_bins, bin_size1, bin_size2,
+                                                  //~ min1, plnpsum, occupbins);
+          //~ break;
+        //~ case (TYPE_AA):
+          //~ cu_aaEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
+                                                  //~ bin_size1, bin_size2, min1,
+                                                  //~ min2, plnpsum, occupbins);
+          //~ break;
+        //~ case (TYPE_AD):
+          //~ cu_adEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
+                                                  //~ n_bins, bin_size1, bin_size2,
+                                                  //~ min1, plnpsum, occupbins);
+          //~ break;
+        //~ case (TYPE_DD):
+          //~ cu_ddEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
+                                                  //~ bin_size1, bin_size2, plnpsum,
+                                                  //~ occupbins);
+          //~ break;
+        //~ }
+      //~ }
+    //~ }
+    //~ gpuErrchk(cudaPeekAtLastError());
+    //~ gpuErrchk(cudaDeviceSynchronize());
     
-    gpuErrchk(cudaMemcpy(ram->cpu_ram_layout->tmp_result_entropy,
-                         ram->gpu_ram_layout->result,
-                         block1->n_dofs * block2->n_dofs * sizeof(PRECISION),
-                         cudaMemcpyDeviceToHost));
-    gpuErrchk(cudaMemcpy(ram->cpu_ram_layout->tmp_result_occupied_bins,
-                         ram->gpu_ram_layout->occupied_bins,
-                         block1->n_dofs * block2->n_dofs * sizeof(unsigned int),
-                         cudaMemcpyDeviceToHost));
+    //~ gpuErrchk(cudaMemcpy(ram->cpu_ram_layout->tmp_result_entropy,
+                         //~ ram->gpu_ram_layout->result,
+                         //~ block1->n_dofs * block2->n_dofs * sizeof(PRECISION),
+                         //~ cudaMemcpyDeviceToHost));
+    //~ gpuErrchk(cudaMemcpy(ram->cpu_ram_layout->tmp_result_occupied_bins,
+                         //~ ram->gpu_ram_layout->occupied_bins,
+                         //~ block1->n_dofs * block2->n_dofs * sizeof(unsigned int),
+                         //~ cudaMemcpyDeviceToHost));
     
 
-    for (unsigned int i = 0; i < block1->n_dofs; i++) {
-      for (unsigned int j = 0; j < block2->n_dofs; j++) {
-        unsigned int dof1_gt = i + block1->dof_id_start_g -
-                            get_min_id_for_type(block1->type, n_dihedrals);
-        unsigned int dof2_gt = j + block2->dof_id_start_g -
-                            get_min_id_for_type(block2->type, n_dihedrals);
-        double entropy =
-            -ram->cpu_ram_layout->tmp_result_entropy[i * block2->n_dofs + j] +
-            (ram->cpu_ram_layout
-                 ->tmp_result_occupied_bins[i * block2->n_dofs + j] -
-             1.0) /
-                (2.0 * n_frames);
-        ent_mat->set2DEntropy(block1->type, block2->type, dof1_gt + 1, dof2_gt + 1,
-                              entropy);
-      }
-    }
-  }
+    //~ for (unsigned int i = 0; i < block1->n_dofs; i++) {
+      //~ for (unsigned int j = 0; j < block2->n_dofs; j++) {
+        //~ unsigned int dof1_gt = i + block1->dof_id_start_g -
+                            //~ get_min_id_for_type(block1->type, n_dihedrals);
+        //~ unsigned int dof2_gt = j + block2->dof_id_start_g -
+                            //~ get_min_id_for_type(block2->type, n_dihedrals);
+        //~ double entropy =
+            //~ -ram->cpu_ram_layout->tmp_result_entropy[i * block2->n_dofs + j] +
+            //~ (ram->cpu_ram_layout
+                 //~ ->tmp_result_occupied_bins[i * block2->n_dofs + j] -
+             //~ 1.0) /
+                //~ (2.0 * n_frames);
+        //~ ent_mat->set2DEntropy(block1->type, block2->type, dof1_gt + 1, dof2_gt + 1,
+                              //~ entropy);
+      //~ }
+    //~ }
+  //~ }
 
-  void calculate_block_gpu(GPU_RAM_Block *block) {
-    size_t bytes_to_zero = ram->gpu_ram_layout->dofs_per_block;
-    bytes_to_zero *=
-        ram->gpu_ram_layout->dofs_per_block *
-        (sizeof(PRECISION) +
-         sizeof(unsigned int) *
-             (n_bins * n_bins +
-              1));
-    gpuErrchk(cudaMemset(ram->gpu_ram_layout->histograms, 0, bytes_to_zero));
+  //~ void calculate_block_gpu(GPU_RAM_Block *block) {
+    //~ size_t bytes_to_zero = ram->gpu_ram_layout->dofs_per_block;
+    //~ bytes_to_zero *=
+        //~ ram->gpu_ram_layout->dofs_per_block *
+        //~ (sizeof(PRECISION) +
+         //~ sizeof(unsigned int) *
+             //~ (n_bins * n_bins +
+              //~ 1));
+    //~ gpuErrchk(cudaMemset(ram->gpu_ram_layout->histograms, 0, bytes_to_zero));
   
 
-    for (unsigned int i = 0; i < block->n_dofs - 1; i++) {
-      for (unsigned int j = i + 1; j < block->n_dofs; j++) {
-        unsigned int dof1_g = i + block->dof_id_start_g;
-        unsigned int dof2_g = j + block->dof_id_start_g;
-        PRECISION min1 = ram->cpu_ram_layout->minima[dof1_g];
-        PRECISION min2 = ram->cpu_ram_layout->minima[dof2_g];
+    //~ for (unsigned int i = 0; i < block->n_dofs - 1; i++) {
+      //~ for (unsigned int j = i + 1; j < block->n_dofs; j++) {
+        //~ unsigned int dof1_g = i + block->dof_id_start_g;
+        //~ unsigned int dof2_g = j + block->dof_id_start_g;
+        //~ PRECISION min1 = ram->cpu_ram_layout->minima[dof1_g];
+        //~ PRECISION min2 = ram->cpu_ram_layout->minima[dof2_g];
 
-        PRECISION bin_size1 =
-            (ram->cpu_ram_layout->maxima[dof1_g] - min1) / n_bins;
-        PRECISION bin_size2 =
-            (ram->cpu_ram_layout->maxima[dof2_g] - min2) / n_bins;
-        unsigned int *histogram = ram->gpu_ram_layout->histograms +
-                                  (i * block->n_dofs + j) * n_bins * n_bins;
+        //~ PRECISION bin_size1 =
+            //~ (ram->cpu_ram_layout->maxima[dof1_g] - min1) / n_bins;
+        //~ PRECISION bin_size2 =
+            //~ (ram->cpu_ram_layout->maxima[dof2_g] - min2) / n_bins;
+        //~ unsigned int *histogram = ram->gpu_ram_layout->histograms +
+                                  //~ (i * block->n_dofs + j) * n_bins * n_bins;
       
-        int blocks = (n_frames + (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE - 1) ) / (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE);
-        #ifdef USE_SHARED_MEM_HISTOGRAMS
-        histo2D_shared_block<<<blocks, HISTOGRAM_THREADS, n_bins * n_bins * sizeof(unsigned int), streams[(i * block->n_dofs + j) % N_STREAMS]>>>(
-        #else
-        histo2D<<<blocks, HISTOGRAM_THREADS, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(
-        #endif
-            block->gpu_ram_start + i * n_frames_padded,
-            block->gpu_ram_start + j * n_frames_padded, n_frames, histogram, n_bins,
-            bin_size1, bin_size2, min1, min2);
-      }
-    }
-    //gpuErrchk(cudaPeekAtLastError());
-    //gpuErrchk(cudaDeviceSynchronize());
-    //for (unsigned int i = 0; i < N_STREAMS; i++) {
-    //    cudaStreamDestroy(streams[i]);
-    //}
-    //gpuErrchk(cudaPeekAtLastError());
+        //~ int blocks = (n_frames + (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE - 1) ) / (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE);
+        //~ #ifdef USE_SHARED_MEM_HISTOGRAMS
+        //~ histo2D_shared_block<<<blocks, HISTOGRAM_THREADS, n_bins * n_bins * sizeof(unsigned int), streams[(i * block->n_dofs + j) % N_STREAMS]>>>(
+        //~ #else
+        //~ histo2D<<<blocks, HISTOGRAM_THREADS, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(
+        //~ #endif
+            //~ block->gpu_ram_start + i * n_frames_padded,
+            //~ block->gpu_ram_start + j * n_frames_padded, n_frames, histogram, n_bins,
+            //~ bin_size1, bin_size2, min1, min2);
+      //~ }
+    //~ }
+    //~ //gpuErrchk(cudaPeekAtLastError());
+    //~ //gpuErrchk(cudaDeviceSynchronize());
+    //~ //for (unsigned int i = 0; i < N_STREAMS; i++) {
+    //~ //    cudaStreamDestroy(streams[i]);
+    //~ //}
+    //~ //gpuErrchk(cudaPeekAtLastError());
 
 
-    for (unsigned int i = 0; i < block->n_dofs - 1; i++) {
-      for (unsigned int j = i + 1; j < block->n_dofs; j++) {
-        unsigned int dof1_g = i + block->dof_id_start_g;
-        unsigned int dof2_g = j + block->dof_id_start_g;
-        PRECISION min1 = ram->cpu_ram_layout->minima[dof1_g];
-        PRECISION min2 = ram->cpu_ram_layout->minima[dof2_g];
+    //~ for (unsigned int i = 0; i < block->n_dofs - 1; i++) {
+      //~ for (unsigned int j = i + 1; j < block->n_dofs; j++) {
+        //~ unsigned int dof1_g = i + block->dof_id_start_g;
+        //~ unsigned int dof2_g = j + block->dof_id_start_g;
+        //~ PRECISION min1 = ram->cpu_ram_layout->minima[dof1_g];
+        //~ PRECISION min2 = ram->cpu_ram_layout->minima[dof2_g];
 
-        PRECISION bin_size1 =
-            (ram->cpu_ram_layout->maxima[dof1_g] - min1) / n_bins;
-        PRECISION bin_size2 =
-            (ram->cpu_ram_layout->maxima[dof2_g] - min2) / n_bins;
+        //~ PRECISION bin_size1 =
+            //~ (ram->cpu_ram_layout->maxima[dof1_g] - min1) / n_bins;
+        //~ PRECISION bin_size2 =
+            //~ (ram->cpu_ram_layout->maxima[dof2_g] - min2) / n_bins;
 
-        unsigned int *histogram = ram->gpu_ram_layout->histograms +
-                                  (i * block->n_dofs + j) * n_bins * n_bins;
-        PRECISION *plnpsum =
-            ram->gpu_ram_layout->result + i * block->n_dofs + j;
-        unsigned int *occupbins =
-            ram->gpu_ram_layout->occupied_bins + i * block->n_dofs + j;
-        int blocks = (n_bins * n_bins + (PLNP_THREADS - 1) ) / PLNP_THREADS;
+        //~ unsigned int *histogram = ram->gpu_ram_layout->histograms +
+                                  //~ (i * block->n_dofs + j) * n_bins * n_bins;
+        //~ PRECISION *plnpsum =
+            //~ ram->gpu_ram_layout->result + i * block->n_dofs + j;
+        //~ unsigned int *occupbins =
+            //~ ram->gpu_ram_layout->occupied_bins + i * block->n_dofs + j;
+        //~ int blocks = (n_bins * n_bins + (PLNP_THREADS - 1) ) / PLNP_THREADS;
 
-        switch (get_pair_type(block->type, block->type)) {
-        case (TYPE_BB):
-          cu_bbEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
-                                                  bin_size1, bin_size2, min1,
-                                                  min2, plnpsum, occupbins);
-          break;
-        case (TYPE_BA):
-          cu_baEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(
-              histogram, n_frames, n_bins, n_bins, bin_size1, bin_size2, min1,
-              min2, plnpsum, occupbins);
-          break;
-        case (TYPE_BD):
-          cu_bdEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
-                                                  n_bins, bin_size1, bin_size2,
-                                                  min1, plnpsum, occupbins);
-          break;
-        case (TYPE_AA):
-          cu_aaEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
-                                                  bin_size1, bin_size2, min1,
-                                                  min2, plnpsum, occupbins);
-          break;
-        case (TYPE_AD):
-          cu_adEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
-                                                  n_bins, bin_size1, bin_size2,
-                                                  min1, plnpsum, occupbins);
-          break;
-        case (TYPE_DD):
-          cu_ddEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
-                                                  bin_size1, bin_size2, plnpsum,
-                                                  occupbins);
-          break;
-        }
-      }
-    }
-    gpuErrchk(cudaPeekAtLastError());
-    gpuErrchk(cudaMemcpy(ram->cpu_ram_layout->tmp_result_entropy,
-                         ram->gpu_ram_layout->result,
-                         block->n_dofs * block->n_dofs * sizeof(PRECISION),
-                         cudaMemcpyDeviceToHost));
-    gpuErrchk(cudaMemcpy(ram->cpu_ram_layout->tmp_result_occupied_bins,
-                         ram->gpu_ram_layout->occupied_bins,
-                         block->n_dofs * block->n_dofs * sizeof(unsigned int),
-                         cudaMemcpyDeviceToHost));
+        //~ switch (get_pair_type(block->type, block->type)) {
+        //~ case (TYPE_BB):
+          //~ cu_bbEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
+                                                  //~ bin_size1, bin_size2, min1,
+                                                  //~ min2, plnpsum, occupbins);
+          //~ break;
+        //~ case (TYPE_BA):
+          //~ cu_baEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(
+              //~ histogram, n_frames, n_bins, n_bins, bin_size1, bin_size2, min1,
+              //~ min2, plnpsum, occupbins);
+          //~ break;
+        //~ case (TYPE_BD):
+          //~ cu_bdEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
+                                                  //~ n_bins, bin_size1, bin_size2,
+                                                  //~ min1, plnpsum, occupbins);
+          //~ break;
+        //~ case (TYPE_AA):
+          //~ cu_aaEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
+                                                  //~ bin_size1, bin_size2, min1,
+                                                  //~ min2, plnpsum, occupbins);
+          //~ break;
+        //~ case (TYPE_AD):
+          //~ cu_adEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
+                                                  //~ n_bins, bin_size1, bin_size2,
+                                                  //~ min1, plnpsum, occupbins);
+          //~ break;
+        //~ case (TYPE_DD):
+          //~ cu_ddEnt<<<blocks, PLNP_THREADS, 0, streams[(i * block->n_dofs + j) % N_STREAMS]>>>(histogram, n_frames, n_bins,
+                                                  //~ bin_size1, bin_size2, plnpsum,
+                                                  //~ occupbins);
+          //~ break;
+        //~ }
+      //~ }
+    //~ }
+    //~ gpuErrchk(cudaPeekAtLastError());
+    //~ gpuErrchk(cudaMemcpy(ram->cpu_ram_layout->tmp_result_entropy,
+                         //~ ram->gpu_ram_layout->result,
+                         //~ block->n_dofs * block->n_dofs * sizeof(PRECISION),
+                         //~ cudaMemcpyDeviceToHost));
+    //~ gpuErrchk(cudaMemcpy(ram->cpu_ram_layout->tmp_result_occupied_bins,
+                         //~ ram->gpu_ram_layout->occupied_bins,
+                         //~ block->n_dofs * block->n_dofs * sizeof(unsigned int),
+                         //~ cudaMemcpyDeviceToHost));
     
 
-    for (unsigned int i = 0; i < block->n_dofs - 1; i++) {
-      for (unsigned int j = i + 1; j < block->n_dofs; j++) {
-        unsigned int dof1_gt = i + block->dof_id_start_g -
-                            get_min_id_for_type(block->type, n_dihedrals);
-        unsigned int dof2_gt = j + block->dof_id_start_g -
-                            get_min_id_for_type(block->type, n_dihedrals);
-        double entropy =
-            -ram->cpu_ram_layout->tmp_result_entropy[i * block->n_dofs + j] +
-            (ram->cpu_ram_layout
-                 ->tmp_result_occupied_bins[i * block->n_dofs + j] -
-             1.0) /
-                (2.0 * n_frames); // includes Herzel entropy unbiasing
-        ent_mat->set2DEntropy(block->type, block->type, dof1_gt + 1, dof2_gt + 1,
-                              entropy);
-      }
-    }
-  }
+    //~ for (unsigned int i = 0; i < block->n_dofs - 1; i++) {
+      //~ for (unsigned int j = i + 1; j < block->n_dofs; j++) {
+        //~ unsigned int dof1_gt = i + block->dof_id_start_g -
+                            //~ get_min_id_for_type(block->type, n_dihedrals);
+        //~ unsigned int dof2_gt = j + block->dof_id_start_g -
+                            //~ get_min_id_for_type(block->type, n_dihedrals);
+        //~ double entropy =
+            //~ -ram->cpu_ram_layout->tmp_result_entropy[i * block->n_dofs + j] +
+            //~ (ram->cpu_ram_layout
+                 //~ ->tmp_result_occupied_bins[i * block->n_dofs + j] -
+             //~ 1.0) /
+                //~ (2.0 * n_frames); // includes Herzel entropy unbiasing
+        //~ ent_mat->set2DEntropy(block->type, block->type, dof1_gt + 1, dof2_gt + 1,
+                              //~ entropy);
+      //~ }
+    //~ }
+  //~ }
 };
 
 int main(int argc, char *argv[]) {
