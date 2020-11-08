@@ -31,6 +31,7 @@
 #include <iostream>
 #include <sys/time.h>
 #include <vector>
+#include <thread>
 
 #include "../util/util.h"
 #include "../util/io/io.h"
@@ -495,6 +496,21 @@ public:
         (unsigned int *)(tmp_result_entropy + gpu_dofs_per_block * gpu_dofs_per_block);
 
   }
+};
+
+class Spin_Lock{
+    public:
+        Spin_Lock(): lock_flag(ATOMIC_FLAG_INIT){}
+        
+        void lock(){
+            while( lock_flag.test_and_set(memory_order_acquire) ){}
+        }
+        
+        void unlock(){
+            lock_flag.clear(memory_order_release);
+        }
+    private:
+        atomic_flag lock_flag;
 };
 
 class GPU {
