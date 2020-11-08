@@ -497,6 +497,82 @@ public:
   }
 };
 
+class GPU {
+    public:
+        int id;
+        struct cudaDeviceProp property;
+        GPU_RAM_Layout* ram;
+    GPU(int id, struct cudaDeviceProp property, unsigned int n_frames_padded, unsigned int n_bins, size_t n_bytes, unsigned int n_dofs_total, bool init_ram = false){
+        this->id = id;
+        this->property = property;
+        if(init_ram) ram = new GPU_RAM_Layout(n_frames_padded, n_bins, n_bytes, n_dofs_total); // create the RAM layout on the GPU 
+    }
+    
+};
+
+class GPU_Ensemble {
+    public:
+    GPU_Ensemble(unsigned int n_frames_padded, unsigned int n_bins, size_t n_bytes, unsigned int n_dofs_total){
+        
+        int n_devices_total;
+        gpuErrchk(cudaGetDeviceCount(&n_devices_total));
+        
+        for(int device = 0; device < n_devices_total; device++){
+            struct cudaDeviceProp property;
+            gpuErrchk(cudaGetDeviceProperties(&property, device));
+            GPU gpu(device, property, n_frames_padded, n_bins, n_bytes, n_dofs_total);
+            gpus_total.push_back(gpu);
+            if(property.major * 10 + property.minor >= 61){
+                GPU gpu(device, property, n_frames_padded, n_bins, n_bytes, n_dofs_total, true);
+                gpus.push_back(gpu);
+            }
+        }
+    }
+    
+    void print_gpu(GPU gpu){
+        
+        struct cudaDeviceProp prop = gpu.property;
+        
+        cout << "Device ID: " << gpu.id << endl;
+        cout << "Device name: " << prop.name << endl;
+        cout << "CUDA capability: " << prop.major << "." << prop.minor << endl;
+        cout << "Global memory: " << prop.totalGlobalMem / 1024 / 1024 << " MiB"
+            << endl;
+        cout << "Shared memory per block: " << prop.sharedMemPerBlock / 1024 << " kiB"
+            << endl;
+        cout << "Maximum threads per block dimension: " << prop.maxThreadsDim[0]
+            << " " << prop.maxThreadsDim[1] << " " << prop.maxThreadsDim[2] << endl;
+        cout << "Maximum blocks per grid dimension: " << prop.maxGridSize[0] << " "
+            << prop.maxGridSize[1] << " " << prop.maxGridSize[2] << endl;
+    //~ cout << "Warp size: " << prop.warpSize << endl << endl;
+    }
+    
+    void report(bool verbose = false){
+        cout << "Found " << gpus_total.size() << " GPU(s):" << endl;
+        if(verbose) cout << endl <<endl;
+        for(unsigned int i = 0; i < gpus_total.size(); i++){
+            if(verbose){
+                print_gpu(gpus_total[i]);
+                cout << endl;
+            }
+            else{
+                cout<<gpus_total[i].property.name<<endl;
+            }
+        }
+        if(!verbose) cout << endl;
+        cout << "Using compatible GPUs with CUDA capability >= 6.1:" << endl;
+        for(unsigned int i = 0; i < gpus.size(); i++){
+            cout<<gpus[i].property.name<<endl;
+        }
+        cout<<endl<<endl;
+    }
+    
+    
+    vector<GPU> gpus;
+    vector<GPU> gpus_total;
+    
+};
+
 // This class manages the RAM on the CPU as well as on the GPU
 class RAM {
 public:
@@ -511,6 +587,9 @@ public:
       
     this->n_dihedrals = bat->get_n_dihedrals(); // get the number of dihedrals from the .(g)bat file
     this->n_dofs_total = 3 * (n_dihedrals + 1); // calculate the total number number of degrees of freedom from the number of dihedrals 
+      
+    GPU_Ensemble mygpus = *new GPU_Ensemble(bat->get_n_frames_padded(4), n_bins, gpu_n_bytes, n_dofs_total);
+    mygpus.report(false);
 
     gpu_ram_layout = new GPU_RAM_Layout(bat->get_n_frames_padded(4), n_bins,
                                         gpu_n_bytes, n_dofs_total); // create the RAM layout on the GPU 
@@ -947,90 +1026,11 @@ public:
   }
 };
 
-class GPU {
-    public:
-        int id;
-        struct cudaDeviceProp property;
-    GPU(int id, struct cudaDeviceProp property){
-        this->id = id;
-        this->property = property;
-    }
-    
-
-
-};
-
-class GPU_Ensemble {
-    public:
-    GPU_Ensemble(){
-        
-        int n_devices_total;
-        gpuErrchk(cudaGetDeviceCount(&n_devices_total));
-        
-        for(int device = 0; device < n_devices_total; device++){
-            struct cudaDeviceProp property;
-            gpuErrchk(cudaGetDeviceProperties(&property, device));
-            GPU gpu(device, property);
-            gpus_total.push_back(gpu);
-            if(property.major * 10 + property.minor >= 61){
-                gpus.push_back(gpu);
-            }
-        }
-    }
-    
-    void print_gpu(GPU gpu){
-        
-        struct cudaDeviceProp prop = gpu.property;
-        
-        cout << "Device ID: " << gpu.id << endl;
-        cout << "Device name: " << prop.name << endl;
-        cout << "CUDA capability: " << prop.major << "." << prop.minor << endl;
-        cout << "Global memory: " << prop.totalGlobalMem / 1024 / 1024 << " MiB"
-            << endl;
-        cout << "Shared memory per block: " << prop.sharedMemPerBlock / 1024 << " kiB"
-            << endl;
-        cout << "Maximum threads per block dimension: " << prop.maxThreadsDim[0]
-            << " " << prop.maxThreadsDim[1] << " " << prop.maxThreadsDim[2] << endl;
-        cout << "Maximum blocks per grid dimension: " << prop.maxGridSize[0] << " "
-            << prop.maxGridSize[1] << " " << prop.maxGridSize[2] << endl;
-    //~ cout << "Warp size: " << prop.warpSize << endl << endl;
-    }
-    
-    void report(bool verbose = false){
-        cout << "Found " << gpus_total.size() << " GPU(s):" << endl;
-        if(verbose) cout << endl <<endl;
-        for(unsigned int i = 0; i < gpus_total.size(); i++){
-            if(verbose){
-                print_gpu(gpus_total[i]);
-                cout << endl;
-            }
-            else{
-                cout<<gpus_total[i].property.name<<endl;
-            }
-        }
-        if(!verbose) cout << endl;
-        cout << "Using compatible GPUs with CUDA capability >= 6.1:" << endl;
-        for(unsigned int i = 0; i < gpus.size(); i++){
-            cout<<gpus[i].property.name<<endl;
-        }
-        cout<<endl<<endl;
-    }
-    
-    
-    vector<GPU> gpus;
-    vector<GPU> gpus_total;
-    
-};
-
 int main(int argc, char *argv[]) {
 
   // start the stopwatch for the execution time
   timeval tv_start, tv_end;
   gettimeofday(&tv_start, NULL);
-
-
-  GPU_Ensemble mygpus = *new GPU_Ensemble();
-    mygpus.report(false);
 
   unsigned int n_bins;
   vector< vector<int> > dihedrals_top;
