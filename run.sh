@@ -18,7 +18,7 @@
 CPU_RAM="8.0" # The CPU RAM you would like to provide in GiB. Be somewhat conservative here. E. g., if your machine has 32 GB RAM, set 25  
 GPU_RAM="2.0" # The GPU RAM you would like to provide in GiB. Be a litte conservative here. E. g., if your GPU has 6 GB RAM, set 5.25
 CUDA_ARCH=61 # The CUDA capability of your GPU, normally the higher the better. In doubt, leave it as it is: 61 is the minimum required
-export CUDA_VISIBLE_DEVICES=0,1,2 # If you have more than one GPUs, you can choose which one to use here
+export CUDA_VISIBLE_DEVICES=0,1,2,4 # If you have more than one GPUs, you can choose which one to use here
 export OMP_NUM_THREADS=4 # Set the number of threads of your CPU.
 
 IN_NAME="test_system/UBQ_UBM2" # The name and location of your trajectory (.xtc) and topology (.top) files

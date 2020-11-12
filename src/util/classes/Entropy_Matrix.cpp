@@ -422,7 +422,8 @@ void Entropy_Matrix::setEntropy(unsigned int dof_id, PRECISION value) {
 // to set 2D entropy values
 void Entropy_Matrix::set2DEntropy(int type1, int type2, unsigned int index1,
                                   unsigned int index2, PRECISION value) {
-  int smaller, bigger, index;
+  int smaller, bigger;
+  size_t index;
   index1--;
   index2--;
   if ((index1 >= 0) && (index2 >= 0)) {

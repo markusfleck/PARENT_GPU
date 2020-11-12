@@ -406,17 +406,17 @@ public:
     }
     
     // calculate the number of bytes to be allocated on the GPU 
-    gpu_n_bytes = (static_cast<size_t>(2) * dofs_per_block * n_frames + dofs_per_block * dofs_per_block) * sizeof(PRECISION) + ( dofs_per_block * dofs_per_block * (n_bins * n_bins + 1) ) * sizeof(unsigned int); 
+    gpu_n_bytes = (static_cast<size_t>(2) * dofs_per_block * n_frames + dofs_per_block * dofs_per_block) * sizeof(PRECISION) + ( static_cast<size_t>(dofs_per_block) * dofs_per_block * (n_bins * n_bins + 1) ) * sizeof(unsigned int); 
     gpuErrchk( cudaMalloc( (void **)&gpu_ram_start, gpu_n_bytes) );
     this->gpu_n_bytes = gpu_n_bytes; // store the number of bytes in the class
 
     // set the pointers for partitioning the GPU RAM according to the calculated
     // dofs_per_block. The order is important here for alignement on the GPU (dofs_per_block can be an odd number: unsigned int is half the bytes of double, also the kernels use e. g. double4 for efficient memory reads.)
     dof_block_1 = (PRECISION*) gpu_ram_start; // set the starting address for GPU RAM bank 1
-    dof_block_2 = dof_block_1 + dofs_per_block * n_frames; // set the starting address for GPU RAM bank 1
-    histograms = (unsigned int *) (dof_block_2 + dofs_per_block * n_frames); // set the starting address for the histograms to be build
-    result = (PRECISION*) (histograms + dofs_per_block * dofs_per_block * n_bins * n_bins); // set the starting address for the 2D entropy results
-    occupied_bins = (unsigned int*) (result + dofs_per_block * dofs_per_block); // set the starting address for the occupied bins result
+    dof_block_2 = dof_block_1 + static_cast<size_t>(dofs_per_block) * n_frames; // set the starting address for GPU RAM bank 1
+    histograms = (unsigned int *) (dof_block_2 + static_cast<size_t>(dofs_per_block) * n_frames); // set the starting address for the histograms to be build
+    result = (PRECISION*) (histograms + static_cast<size_t>(dofs_per_block) * dofs_per_block * n_bins * n_bins); // set the starting address for the 2D entropy results
+    occupied_bins = (unsigned int*) (result + static_cast<size_t>(dofs_per_block) * dofs_per_block); // set the starting address for the occupied bins result
   }
 };
 
@@ -459,49 +459,54 @@ public:
     
     // calculate the maximum number of dofs (for one of the two dof_blocks) so that everything still fits into CPU RAM. From the storage provided (cpu_n_bytes), subtract the storage used for the temporary results(tmp_result_entropy and tmp_result_occupied_bins),
     // the storage for the minima, maxima and 1D entropy values as well as the 2D entroy values. What remains can be used for the two dof blocks, where each dof block needs ( dofs_per_block * n_frames * sizeof(PRECISION) ) bytes.     
-    int dofs_per_block_tmp = ( cpu_n_bytes - gpu_dofs_per_block * gpu_dofs_per_block * ( sizeof(PRECISION) + sizeof(unsigned int) )  - (3 * n_dofs_total + n_dofs_total * ( n_dofs_total - 1 ) / 2) * sizeof(PRECISION) )
-                   / double( 2 * n_frames * sizeof(PRECISION) );
-    if(dofs_per_block_tmp < 4){
-        cerr<<"ERROR: YOUR PROVIDED CPU RAM IS NOT EVEN SUFFICIENT TO HOLD 4 DEGREES OF FREEDOM. PLEASE PROVIDE MORE CPU RAM. ABORTING."<<endl;
+	size_t sub = static_cast<size_t>(gpu_dofs_per_block) * gpu_dofs_per_block * ( sizeof(PRECISION) + sizeof(unsigned int) )  + (static_cast<size_t>(3) * n_dofs_total + static_cast<size_t>(n_dofs_total) * ( n_dofs_total - 1 ) / 2) * sizeof(PRECISION);
+
+	if(cpu_n_bytes <= sub){
+        cerr<<"ERROR: YOUR PROVIDED CPU RAM IS NOT EVEN SUFFICIENT TO STORE THE RESULTS. PLEASE PROVIDE MORE THAN "<< double(sub)/1024.0/1024.0/1024.0 <<" GiB CPU RAM. ABORTING."<<endl;
         exit(EXIT_FAILURE);
-    }
-    dofs_per_block = dofs_per_block_tmp;
+	}
+	
+	dofs_per_block = (cpu_n_bytes - sub) / ( static_cast<size_t>(2) * n_frames * sizeof(PRECISION) );
+	 if(dofs_per_block < 4){
+		cerr<<"ERROR: YOUR PROVIDED CPU RAM IS NOT EVEN SUFFICIENT TO HOLD 4 DEGREES OF FREEDOM. PLEASE PROVIDE MORE CPU RAM. ABORTING."<<endl;
+		exit(EXIT_FAILURE);
+	}
     
     // if all dofs fit into RAM, still set up two blocks to be consistent with
     // the algorithm
     if (2 * dofs_per_block > n_dofs_total) dofs_per_block = (n_dofs_total + 1) / 2; //TODO: In this case, only load the trajectory once
     
     //calculate the actual number of CPU RAM bytes used
-    cpu_n_bytes = (static_cast<size_t>(2) * dofs_per_block * n_frames + 3 * n_dofs_total + n_dofs_total * (n_dofs_total - 1) / 2) * sizeof(PRECISION) + gpu_dofs_per_block * gpu_dofs_per_block * ( sizeof(PRECISION) + sizeof(unsigned int) );
+    cpu_n_bytes = (static_cast<size_t>(2) * dofs_per_block * n_frames + static_cast<size_t>(3) * n_dofs_total + static_cast<size_t>(n_dofs_total) * (n_dofs_total - 1) / 2) * sizeof(PRECISION) 
+                    + static_cast<size_t>(gpu_dofs_per_block) * gpu_dofs_per_block * ( sizeof(PRECISION) + sizeof(unsigned int) );
     this->cpu_n_bytes = cpu_n_bytes; // store this number
     cpu_ram_start = new char[cpu_n_bytes]; // allocate those bytes
-
 
     // set the pointers for partitioning the CPU RAM according to the calculated
     // dofs_per_block
     dof_block_1 = (PRECISION *) cpu_ram_start;
-    dof_block_2 = dof_block_1 + dofs_per_block * n_frames;
+    dof_block_2 = dof_block_1 + static_cast<size_t>(dofs_per_block) * n_frames;
 
-    result_entropy = dof_block_2 + dofs_per_block * n_frames;
+    result_entropy = dof_block_2 + static_cast<size_t>(dofs_per_block) * n_frames;
     result_entropy1D = result_entropy;
     result_entropy1D_b = result_entropy1D;
-    result_entropy1D_a = result_entropy1D_b + n_bonds;
-    result_entropy1D_d = result_entropy1D_a + n_angles;
+    result_entropy1D_a = result_entropy1D_b + static_cast<size_t>(n_bonds);
+    result_entropy1D_d = result_entropy1D_a + static_cast<size_t>(n_angles);
 
-    result_entropy2D = result_entropy1D + n_dofs_total;
+    result_entropy2D = result_entropy1D + static_cast<size_t>(n_dofs_total);
     result_entropy2D_bb = result_entropy2D;
-    result_entropy2D_ba = result_entropy2D_bb + n_bonds * (n_bonds - 1) / 2; // binomial formula for pairs 
-    result_entropy2D_bd = result_entropy2D_ba + n_bonds * n_angles; // all combinations
-    result_entropy2D_aa = result_entropy2D_bd + n_bonds * n_dihedrals; // all combinations
-    result_entropy2D_ad = result_entropy2D_aa + n_angles * (n_angles - 1) / 2; // binomial formula for pairs
-    result_entropy2D_dd = result_entropy2D_ad + n_angles * n_dihedrals; // all combinations
+    result_entropy2D_ba = result_entropy2D_bb + static_cast<size_t>(n_bonds) * (n_bonds - 1) / 2; // binomial formula for pairs 
+    result_entropy2D_bd = result_entropy2D_ba + static_cast<size_t>(n_bonds) * n_angles; // all combinations
+    result_entropy2D_aa = result_entropy2D_bd + static_cast<size_t>(n_bonds) * n_dihedrals; // all combinations
+    result_entropy2D_ad = result_entropy2D_aa + static_cast<size_t>(n_angles) * (n_angles - 1) / 2; // binomial formula for pairs
+    result_entropy2D_dd = result_entropy2D_ad + static_cast<size_t>(n_angles) * n_dihedrals; // all combinations
 
-    extrema = result_entropy2D + n_dofs_total * (n_dofs_total - 1) / 2; // binomial formula for pairs
+    extrema = result_entropy2D + static_cast<size_t>(n_dofs_total) * (n_dofs_total - 1) / 2; // binomial formula for pairs
     minima = extrema;
-    maxima = extrema + n_dofs_total;
-    tmp_result_entropy = maxima + n_dofs_total;
+    maxima = extrema + static_cast<size_t>(n_dofs_total);
+    tmp_result_entropy = maxima + static_cast<size_t>(n_dofs_total);
     tmp_result_occupied_bins =
-        (unsigned int *)(tmp_result_entropy + gpu_dofs_per_block * gpu_dofs_per_block);
+        (unsigned int *)(tmp_result_entropy + static_cast<size_t>(gpu_dofs_per_block) * gpu_dofs_per_block);
 
   }
 };
@@ -872,7 +877,6 @@ class Work{
                     (2.0 * n_frames); // includes Herzel entropy unbiasing
                 ent_mat->set2DEntropy(block->type, block->type, dof1_gt + 1, dof2_gt + 1,
                                   entropy);
-            
           }
         }
         spin_lock.unlock();
