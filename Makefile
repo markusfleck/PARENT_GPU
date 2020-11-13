@@ -108,7 +108,7 @@ checks: all
 	bin/BAT_builder -t $(IN_NAME).top -x $(IN_NAME).xtc -o $(OUT_NAME).bat -bb "CA C N H1 O1"
 	bin/convert_BAT_to_GBAT -f $(OUT_NAME).bat -o $(OUT_NAME).gbat --ram $(CPU_RAM)
 	bin/PARENT_GPU -f $(OUT_NAME).gbat -o $(OUT_NAME).par -b 50 --cpu_ram $(CPU_RAM) --gpu_ram $(GPU_RAM)
-	bin/MIST_GPU -f $(OUT_NAME).par -o $(OUT_NAME)_MIST_GPU.par
+	bin/MIST_GPU -f $(OUT_NAME).par -o $(OUT_NAME)_MIST_GPU.par --gpu_ram $(GPU_RAM)
 	bin/MIST_openMP -f $(OUT_NAME).par -o $(OUT_NAME)_MIST_openMP.par
 	bin/get_values_from_PAR -p ${OUT_NAME}.par --short 2>&1 > $(OUT_NAME)_MIE.txt
 	bin/get_values_from_PAR -p ${OUT_NAME}_MIST_GPU.par --short 2>&1 > $(OUT_NAME)_MIST_GPU.txt

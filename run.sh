@@ -43,7 +43,7 @@ bin/convert_BAT_to_GBAT -f ${OUT_NAME}.bat -o ${OUT_NAME}.gbat --ram $CPU_RAM # 
 ./bin/PARENT_GPU -f ${OUT_NAME}.gbat -o ${OUT_NAME}.par -b $NBINS --cpu_ram $CPU_RAM --gpu_ram $GPU_RAM && bin/get_values_from_PAR -p ${OUT_NAME}.par --short | tee ${OUT_NAME}_MIE.txt # run the MIE calculation, the heart of PARENT_GPU 
 echo -e "\n\n\n"
 
-bin/MIST_GPU -f ${OUT_NAME}.par -o ${OUT_NAME}_MIST_GPU.par && bin/get_values_from_PAR -p ${OUT_NAME}_MIST_GPU.par --short | tee ${OUT_NAME}_MIST.txt # calculate the MIST approximation (in principle optional, but numerically mandatory)
+bin/MIST_GPU -f ${OUT_NAME}.par -o ${OUT_NAME}_MIST_GPU.par --gpu_ram $GPU_RAM && bin/get_values_from_PAR -p ${OUT_NAME}_MIST_GPU.par --short | tee ${OUT_NAME}_MIST.txt # calculate the MIST approximation (in principle optional, but numerically mandatory)
 # echo -e "\n\n\n"; bin/MIST_openMP -f ${OUT_NAME}.par -o ${OUT_NAME}_MIST_openMP.par && bin/get_values_from_PAR -p ${OUT_NAME}_MIST_openMP.par --short # no need to run this line unless for some exotic reason you don't want to use your GPU to calculate the MIST approximation as done just above
 
 

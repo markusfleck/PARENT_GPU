@@ -20,14 +20,15 @@
 #include <string>
 
 
+
 #ifdef __CUDACC__
+    #include "../util/classes/My_Error.cpp"
     #define gpuErrchk(ans)                                                         \
       { gpuAssert((ans), __FILE__, __LINE__); }
     inline void gpuAssert(cudaError_t return_code, const char *file, int line) {
       if (return_code != cudaSuccess) {
-        fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(return_code),
-                file, line);
-        exit(return_code);
+        My_Error my_error(std::string("GPUassert: ") + std::string(cudaGetErrorString(return_code)) + std::string(" ") + std::string(file) + std::string(" ") + std::to_string(line) + std::string("\n"));
+        throw my_error;
       }
     }
 #endif
