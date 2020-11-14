@@ -1,0 +1,27 @@
+mol new test_system/UBQ_UBM2.gro
+
+mol delrep 0 top
+mol representation NewCartoon
+mol addrep top
+set sel [atomselect top "resid 6 90"]
+mol selection "[$sel text]"
+mol representation VDW
+mol color ColorID 1
+mol addrep top
+set sel [atomselect top "resid 22 24"]
+mol selection "[$sel text]"
+mol representation VDW
+mol color ColorID 2
+mol addrep top
+set sel [atomselect top "resid 55 58"]
+mol selection "[$sel text]"
+mol representation VDW
+mol color ColorID 3
+mol addrep top
+set sel [atomselect top "resid 80 89 97 104"]
+mol selection "[$sel text]"
+mol representation VDW
+mol color ColorID 4
+mol addrep top
+
+

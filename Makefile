@@ -20,7 +20,7 @@ endif
 CXX = g++
 CXXFLAGS = -O3 -Wall
 
-all : bin/BAT_builder bin/convert_BAT_to_GBAT bin/PARENT_GPU bin/MIST_openMP bin/MIST_GPU bin/get_values_from_PAR
+all : bin/BAT_builder bin/convert_BAT_to_GBAT bin/PARENT_GPU bin/MIST_openMP bin/MIST_GPU bin/get_values_from_PAR bin/hierarchical_resdiue_clusters
 
 clean :
 	- rm -r bin
@@ -71,6 +71,9 @@ obj/Arg_Parser.o: src/util/classes/Arg_Parser.cpp src/util/classes/Arg_Parser.h 
 obj/util.o: src/util/util.cpp src/util/util.h | obj
 	$(CXX) -c src/util/util.cpp -o obj/util.o $(CXXFLAGS)
     
+obj/Residue_Representation.o: src/util/classes/Residue_Representation.cpp src/util/classes/Residue_Representation.h | obj
+	$(CXX) -c src/util/classes/Residue_Representation.cpp -o obj/Residue_Representation.o $(CXXFLAGS)
+    
     
     
 
@@ -78,9 +81,12 @@ bin/convert_BAT_to_GBAT: src/BAT_builder/convert_BAT_to_GBAT.cpp obj/util.o obj/
 	$(CXX) --std=c++11 src/BAT_builder/convert_BAT_to_GBAT.cpp obj/util.o obj/Arg_Parser.o obj/Bat_File.o -o bin/convert_BAT_to_GBAT $(CXXFLAGS)
     
 
-bin/get_values_from_PAR: src/process_output/get_values_from_PAR.cpp obj/io.o obj/util.o | bin
-	$(CXX) --std=c++11 -O3 src/process_output/get_values_from_PAR.cpp obj/io.o obj/util.o -o bin/get_values_from_PAR $(CXXFLAGS)
-
+bin/get_values_from_PAR: src/analysis/get_values_from_PAR.cpp obj/io.o obj/util.o | bin
+	$(CXX) --std=c++11 -O3 src/analysis/get_values_from_PAR.cpp obj/io.o obj/util.o -o bin/get_values_from_PAR $(CXXFLAGS)
+    
+    
+bin/hierarchical_resdiue_clusters: src/analysis/hierarchical_resdiue_clusters.cpp obj/Residue_Representation.o obj/Entropy_Matrix.o obj/Arg_Parser.o obj/util.o | bin
+	$(CXX) --std=c++11 -O3 src/analysis/hierarchical_resdiue_clusters.cpp obj/Residue_Representation.o obj/Entropy_Matrix.o obj/Arg_Parser.o obj/util.o -o bin/hierarchical_resdiue_clusters $(CXXFLAGS)
 
 
 bin/PARENT_GPU: src/PARENT_GPU/PARENT_GPU.cu src/PARENT_GPU/PARENT_GPU_kernels.cu obj/io.o src/util/io/io.h obj/util.o src/util/types.h | bin
@@ -108,15 +114,17 @@ checks: all
 	bin/BAT_builder -t $(IN_NAME).top -x $(IN_NAME).xtc -o $(OUT_NAME).bat -bb "CA C N H1 O1"
 	bin/convert_BAT_to_GBAT -f $(OUT_NAME).bat -o $(OUT_NAME).gbat --ram $(CPU_RAM)
 	bin/PARENT_GPU -f $(OUT_NAME).gbat -o $(OUT_NAME).par -b 50 --cpu_ram $(CPU_RAM) --gpu_ram $(GPU_RAM)
-	bin/MIST_GPU -f $(OUT_NAME).par -o $(OUT_NAME)_MIST_GPU.par --gpu_ram $(GPU_RAM)
+	bin/MIST_GPU -f $(OUT_NAME).par -o $(OUT_NAME)_MIST_GPU.par
 	bin/MIST_openMP -f $(OUT_NAME).par -o $(OUT_NAME)_MIST_openMP.par
 	bin/get_values_from_PAR -p ${OUT_NAME}.par --short 2>&1 > $(OUT_NAME)_MIE.txt
 	bin/get_values_from_PAR -p ${OUT_NAME}_MIST_GPU.par --short 2>&1 > $(OUT_NAME)_MIST_GPU.txt
 	bin/get_values_from_PAR -p ${OUT_NAME}_MIST_openMP.par --short 2>&1 > $(OUT_NAME)_MIST_openMP.txt
+	bin/hierarchical_resdiue_clusters -f ${IN_NAME}.par -gro ${IN_NAME}.gro -vmd ${OUT_NAME}.vmd -perc 0.15 -dist 0 -clustermode AVER -residuemode MAX
 	echo; echo; echo; \
     CHECK_MIE=$$(diff $(OUT_NAME)_MIE.txt test_system/sample_output/sample_output_MIE.txt); \
     CHECK_MIST_GPU=$$(diff $(OUT_NAME)_MIST_GPU.txt test_system/sample_output/sample_output_MIST.txt); \
     CHECK_MIST_OPENMP=$$(diff $(OUT_NAME)_MIST_openMP.txt test_system/sample_output/sample_output_MIST.txt); \
+    CHECK_HIERARCHICAL=$$(diff $(OUT_NAME).vmd test_system/sample_output/sample_output.vmd); \
     if [ "$$CHECK_MIE" = "" ]; then\
         echo "PARENT_GPU: pass"; else\
         echo "PARENT_GPU: FAIL"; fi;\
@@ -126,6 +134,9 @@ checks: all
     if [ "$$CHECK_MIST_OPENMP" = "" ]; then\
         echo "MIST_openMP: pass"; else\
         echo "MIST_openMP: FAIL"; fi;\
+    if [ "$$CHECK_HIERARCHICAL" = "" ]; then\
+        echo "hierarchical_resdiue_clusters: pass"; else\
+        echo "hierarchical_resdiue_clusters: FAIL"; fi;\
     rm -r ./$(RAND)
 
 
