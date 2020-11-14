@@ -1,7 +1,17 @@
 # PARENT_GPU
 CUDA-enabled computation of biomolecular configurational entropy from molecular dynamics trajectories.
-<br />  
-    
+<br />
+<br />
+<br />
+<p align="center">
+  <img src="./UBQ_UBM2.png" width="400"/>
+  <br />
+  <b>Interaction clusters in a Ubiquitin-UBM2 protein complex.</b> The clusters were identified<br /> using mutual information terms calculated with PARENT_GPU. The Ubiquitin<br /> backbone is shown in blue-grey, the UBM2 backbone in yellow. The two clusters,<br /> represented as spheres, at the bottom (brown and dark grey)  acknowledge the strong<br /> interaction in alpha-helices. The large yellow cluster demonstrates the concerted motion<br /> in the dynamical UBM2 ligand.  The red cluster characterizes the binding of UBM2<br /> to Ubiquitin. It consists of a protonated Lysine in Ubiquitin and a Tyrosine in UBM2.<br /> Note that for visualization purposes only, the average structure over the simulated<br /> Ubiquitin-UBM2 trajectory was used, so e. g. the red Tyrosine in UBM2 looks distorted.<br /> The underlying entropy calculations do not apply any structure averaging.
+</p>
+
+<br />
+<br />
+
     Copyright (C) 2020  Markus Fleck
 
     This program is free software: you can redistribute it and/or modify
@@ -16,6 +26,8 @@ CUDA-enabled computation of biomolecular configurational entropy from molecular 
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 <br /> 
+<br />
+
 
 # General considerations
 This code has its roots in my PARENT repository, which features hybrid MPI/openMP architecture and is targeted at CPU clusters. PARENT_GPU
