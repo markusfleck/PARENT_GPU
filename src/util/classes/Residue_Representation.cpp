@@ -64,11 +64,13 @@ Residue_Representation::Residue_Representation(char const * infileInput, bool in
     //assign bonds to bondindices[k] if both atoms are part of residue group[k]    
     tmpintvec.clear();
     tmpintvec.push_back(-1);//create a dummy vector to start the 2D vector  
+    bool lead_flag = false; 
     if(calcBonds){
       for(unsigned int k=0; k<groups.size(); k++){
         bondIndices.push_back(tmpintvec);//and use it as a dummy for bondIndices[k] initialization
         for(int j=1; j<=nDihedrals+2; j++){ //in order to check for all bonds if they are in residue group[k]
           found=0;
+          bool lead_flag = false;
           for(unsigned int i=0; i<groups[k].size(); i++){//check if the first atom of bond j matches any atom in groups[k]
             if(groups[k][i] == mat->getBondAtom(j,1)){
               found++;
@@ -78,10 +80,11 @@ Residue_Representation::Residue_Representation(char const * infileInput, bool in
           for(unsigned int i=0; i<groups[k].size(); i++){//check if the second atom of bond j matches any atom in groups[k]
             if(groups[k][i] == mat->getBondAtom(j,2)){
               found++;
+              lead_flag = true;
               break;   
             }
           }
-          if((!includeFull)&&(found>0)){bondIndices[k].push_back(j);} //if half or more of the atoms of bond j are in group[k], add it to bondIndices[k] 
+          if((!includeFull)&&lead_flag){bondIndices[k].push_back(j);} //if the leading atom if the bond is in the residue, add the bond to bondIndices[k] 
           if(includeFull&&(found==2)){bondIndices[k].push_back(j);} //if the includeFull option was set, only include the degree of freedom if all its atoms are part of the residue
         }
        bondIndices[k].erase(bondIndices[k].begin()); //remove the first dummy tmpintvec which was used for bondIndices[k] initialization
@@ -92,12 +95,13 @@ Residue_Representation::Residue_Representation(char const * infileInput, bool in
         
     //assign angles to angleindices[k] if all three atoms are part of residue group[k]    
     tmpintvec.clear();
-    tmpintvec.push_back(-1);//create a dummy vector to start the 2D vector  
+    tmpintvec.push_back(-1);//create a dummy vector to start the 2D vector 
     if(calcAngles){
       for(unsigned int k=0;k<groups.size();k++){
         angleIndices.push_back(tmpintvec);//and use it as a dummy for angleIndices[k] initialization
         for(int j=1;j<=nDihedrals+1;j++){ //in order to check for all angles if they are in residue group[k]
           found=0;
+          lead_flag = false;
           for(unsigned int i=0;i<groups[k].size();i++){//check if the first atom of angle j matches any atom in groups[k]
             if(groups[k][i]==mat->getAngleAtom(j,1)){
               found++;
@@ -113,10 +117,11 @@ Residue_Representation::Residue_Representation(char const * infileInput, bool in
                     for(unsigned int i=0;i<groups[k].size();i++){//check if the third atom of angle j matches any atom in groups[k]
             if(groups[k][i]==mat->getAngleAtom(j,3)){
               found++;
+              lead_flag = true;
               break;   
             }
           }
-          if((!includeFull)&&(found>1)){angleIndices[k].push_back(j);} //if more than half of the atoms of angle j are in group[k], add it to angleIndices[k] 
+          if((!includeFull)&&lead_flag){angleIndices[k].push_back(j);} //if the leading atom if the angle is in the residue, add the angle to angleIndices[k] 
           if(includeFull&&(found==3)){angleIndices[k].push_back(j);} //if the includeFull option was set, only include the degree of freedom if all its atoms are part of the residue
         }
        angleIndices[k].erase(angleIndices[k].begin()); //remove the first dummy tmpintvec which was used for angleIndices[k] initialization
@@ -127,12 +132,13 @@ Residue_Representation::Residue_Representation(char const * infileInput, bool in
         
     //assign dihedrals to dihedralindices[k] if all four atoms are part of residue group[k]    
     tmpintvec.clear();
-    tmpintvec.push_back(-1);//create a dummy vector to start the 2D vector  
+    tmpintvec.push_back(-1);//create a dummy vector to start the 2D vector
     if(calcDihedrals){
       for(unsigned int k=0;k<groups.size();k++){
         dihedralIndices.push_back(tmpintvec);//and use it as a dummy for dihedralIndices[k] initialization
         for(int j=1;j<=nDihedrals;j++){ //in order to check for all dihedrals if they are in residue group[k]
           found=0;
+          lead_flag = false;
           for(unsigned int i=0;i<groups[k].size();i++){//check if the first atom of dihedral j matches any atom in groups[k]
             if(groups[k][i]==mat->getDihedralAtom(j,1)){
               found++;
@@ -145,19 +151,20 @@ Residue_Representation::Residue_Representation(char const * infileInput, bool in
               break;   
             }
           }
-                    for(unsigned int i=0;i<groups[k].size();i++){//check if the third atom of dihedral j matches any atom in groups[k]
+            for(unsigned int i=0;i<groups[k].size();i++){//check if the third atom of dihedral j matches any atom in groups[k]
             if(groups[k][i]==mat->getDihedralAtom(j,3)){
               found++;
               break;   
             }
           }
-                    for(unsigned int i=0;i<groups[k].size();i++){//check if the fourth atom of dihedral j matches any atom in groups[k]
+            for(unsigned int i=0;i<groups[k].size();i++){//check if the fourth atom of dihedral j matches any atom in groups[k]
             if(groups[k][i]==mat->getDihedralAtom(j,4)){
               found++;
+              lead_flag = true;
               break;   
             }
           }
-          if((!includeFull)&&(found>1)){dihedralIndices[k].push_back(j);} //if half or more of the atoms of dihedral j are in group[k], add it to dihedralIndices[k] 
+          if((!includeFull)&&lead_flag){dihedralIndices[k].push_back(j);} //if the leading atom if the dihedral is in the residue, add the dihedral to dihedralIndices[k] 
           if(includeFull&&(found==4)){dihedralIndices[k].push_back(j);} //if the includeFull option was set, only include the degree of freedom if all its atoms are part of the residue
         }
        dihedralIndices[k].erase(dihedralIndices[k].begin()); //remove the first dummy tmpintvec which was used for dihedralIndices[k] initialization

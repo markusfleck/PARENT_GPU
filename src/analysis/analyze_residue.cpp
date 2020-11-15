@@ -44,7 +44,7 @@ int main(int argc, char* argv[]){
     exit(EXIT_FAILURE);
   }
 
-    Residue_Representation rep(arg_parser.get("-f"), true, MODE_TOTAL);
+    Residue_Representation rep(arg_parser.get("-f"), false, MODE_TOTAL);
     Entropy_Matrix* mat = rep.getEntropy_Matrix();
     
     

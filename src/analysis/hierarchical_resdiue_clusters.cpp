@@ -70,19 +70,20 @@ int main(int argc, char* argv[]){
 
     Arg_Parser arg_parser(argc, argv);
   
-    if( !( ( arg_parser.exists( string("-f") ) && arg_parser.exists( string("-perc") ) && arg_parser.exists( string("-dist") ) && arg_parser.exists( string("-clustermode") ) && arg_parser.exists( string("-residuemode") ) )
-        && ( (argc==11) || ( (argc==15) && arg_parser.exists( string("-vmd") ) && arg_parser.exists( string("-gro") ) ) ) ) ){
-        cerr<<"USAGE:\n"<<argv[0]<<" -f input.par -perc CutoffPercenatage -dist MinimumResidueDistance -clustermode MAX|AVER -residuemode MAX|AVER|TOTAL [-vmd output.vmd -gro input.gro]"<<endl;
+    if( !( ( arg_parser.exists( string("-f") ) && arg_parser.exists( string("-perc") ) && arg_parser.exists( string("-dist") ) && arg_parser.exists( string("-clustermode") ) && arg_parser.exists( string("-residuepairmode") ) && arg_parser.exists( string("-residuemode") ) )
+        && ( (argc==13) || ( (argc==17) && arg_parser.exists( string("-vmd") ) && arg_parser.exists( string("-gro") ) ) ) ) ){
+        cerr<<"USAGE:\n"<<argv[0]<<" -f input.par -perc CutoffPercenatage -dist MinimumResidueDistance -clustermode MAX|AVER -residuepairmode MAX|AVER|TOTAL -residuemode FULL|LEAD [-vmd output.vmd -gro input.gro]"<<endl;
         return 1;
     }
     char* inputFilename = arg_parser.get("-f");
     char* vmdFilename = arg_parser.get("-vmd");
     char* groFilename = arg_parser.get("-gro");
     string clusterMode( arg_parser.get("-clustermode") );
+    string residuePairMode( arg_parser.get("-residuepairmode") );
     string residueMode( arg_parser.get("-residuemode") );
     
-    if(((clusterMode!=string("MAX"))&&(clusterMode!=string("AVER")))||((residueMode!=string("MAX"))&&(residueMode!=string("AVER"))&&(residueMode!=string("TOTAL")))){
-        cerr<<"USAGE:\n"<<argv[0]<<" -f input.par -perc CutoffPercenatage -dist MinimumResidueDistance -clustermode MAX|AVER -residuemode MAX|AVER|TOTAL [-vmd output.vmd -gro input.gro]"<<endl;
+    if(((clusterMode!=string("MAX"))&&(clusterMode!=string("AVER")))||((residuePairMode!=string("MAX"))&&(residuePairMode!=string("AVER"))&&(residuePairMode!=string("TOTAL")))||((residueMode!=string("FULL"))&&(residueMode!=string("LEAD")))){
+        cerr<<"USAGE:\n"<<argv[0]<<" -f input.par -perc CutoffPercenatage -dist MinimumResidueDistance -clustermode MAX|AVER -residuepairmode MAX|AVER|TOTAL -residuemode FULL|LEAD [-vmd output.vmd -gro input.gro]"<<endl;
         return 1;
     }
     
@@ -117,14 +118,16 @@ int main(int argc, char* argv[]){
   
   Residue_Representation* rep;//create a residue representation of the mutual information matrix
   
-  if(residueMode==string("MAX")){
-    rep = new Residue_Representation(inputFilename,true,MODE_MAX);
+  bool include_full = (residuePairMode==string("FULL"));
+  
+  if(residuePairMode==string("MAX")){
+    rep = new Residue_Representation(inputFilename,include_full,MODE_MAX);
   }
-  else if(residueMode==string("AVER")){
-    rep = new Residue_Representation(inputFilename,true,MODE_AVER);
+  else if(residuePairMode==string("AVER")){
+    rep = new Residue_Representation(inputFilename,include_full,MODE_AVER);
   }
-  else if(residueMode==string("TOTAL")){
-    rep = new Residue_Representation(inputFilename,true,MODE_TOTAL);
+  else if(residuePairMode==string("TOTAL")){
+    rep = new Residue_Representation(inputFilename,include_full,MODE_TOTAL);
   }
   else{
     cerr<<"ERROR: UNKNOWN RESIDUE REPRESENTATION MODE. ABORTING!"<<endl;

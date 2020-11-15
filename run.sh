@@ -47,7 +47,7 @@ echo -e "\n\n\n"
 bin/MIST_GPU -f ${OUT_NAME}.par -o ${OUT_NAME}_MIST_GPU.par && bin/get_values_from_PAR -p ${OUT_NAME}_MIST_GPU.par --short | tee ${OUT_NAME}_MIST.txt # calculate the MIST approximation (in principle optional, but numerically mandatory)
 # echo -e "\n\n\n"; bin/MIST_openMP -f ${OUT_NAME}.par -o ${OUT_NAME}_MIST_openMP.par && bin/get_values_from_PAR -p ${OUT_NAME}_MIST_openMP.par --short # no need to run this line unless for some exotic reason you don't want to use your GPU to calculate the MIST approximation as done just above
 
-echo -e "\n\n\n"; bin/hierarchical_resdiue_clusters -f ${OUT_NAME}.par -gro ${IN_NAME}.gro -vmd ${OUT_NAME}.vmd -perc 0.15 -dist 0 -clustermode AVER -residuemode MAX
+echo -e "\n\n\n"; bin/hierarchical_resdiue_clusters -f ${OUT_NAME}.par -gro ${IN_NAME}.gro -vmd ${OUT_NAME}.vmd -perc 0.15 -dist 0 -clustermode AVER -residuepairmode MAX -residuemode LEAD
 
 echo -e "\n\n\n"; bin/analyze_residue -f ${OUT_NAME}.par -resid ${RESID1} | tee ${OUT_NAME}_residue${RESID1}.txt
 

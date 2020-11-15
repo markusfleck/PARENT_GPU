@@ -134,7 +134,7 @@ checks: all
 	bin/get_values_from_PAR -p ${OUT_NAME}.par --short 2>&1 > $(OUT_NAME)_MIE.txt
 	bin/get_values_from_PAR -p ${OUT_NAME}_MIST_GPU.par --short 2>&1 > $(OUT_NAME)_MIST_GPU.txt
 	bin/get_values_from_PAR -p ${OUT_NAME}_MIST_openMP.par --short 2>&1 > $(OUT_NAME)_MIST_openMP.txt
-	bin/hierarchical_resdiue_clusters -f ${IN_NAME}.par -gro ${IN_NAME}.gro -vmd ${OUT_NAME}.vmd -perc 0.15 -dist 0 -clustermode AVER -residuemode MAX
+	bin/hierarchical_resdiue_clusters -f ${IN_NAME}.par -gro ${IN_NAME}.gro -vmd ${OUT_NAME}.vmd -perc 0.15 -dist 0 -clustermode AVER -residuepairmode MAX -residuemode LEAD
 	bin/analyze_residue -f ${IN_NAME}.par -resid 45 > $(OUT_NAME)_residue45.txt
 	bin/analyze_residue_pair -f ${IN_NAME}.par -resid1 45 -resid2 48 > $(OUT_NAME)_residue_pair_45_48.txt
 	echo; echo; echo; \
