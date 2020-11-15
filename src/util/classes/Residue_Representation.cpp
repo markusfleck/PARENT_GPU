@@ -16,7 +16,7 @@
 
 
 #include "Residue_Representation.h"
-
+    #include<iostream>
 
 using namespace std;
 
@@ -125,7 +125,7 @@ Residue_Representation::Residue_Representation(char const * infileInput, bool in
         
         
         
-        //assign dihedrals to dihedralindices[k] if all four atoms are part of residue group[k]    
+    //assign dihedrals to dihedralindices[k] if all four atoms are part of residue group[k]    
     tmpintvec.clear();
     tmpintvec.push_back(-1);//create a dummy vector to start the 2D vector  
     if(calcDihedrals){
@@ -173,7 +173,7 @@ Residue_Representation::Residue_Representation(char const * infileInput, bool in
 
 void Residue_Representation::calculate_matrix(){
     //create a mutual information matrix between all residues
-    mutualArray= new double[nResidues*(nResidues-1)/2];
+    mutualArray = new double[nResidues*(nResidues-1)/2];
     int counter=0;
     for(unsigned int i=0;i<nResidues-1;i++){
       for(unsigned int j=i+1;j<nResidues;j++){
@@ -310,13 +310,14 @@ void Residue_Representation::calculate_matrix(){
         counter++;
        }
     }
-        
+    matrix_calculated = true;
 }
 
 
 Residue_Representation::~Residue_Representation(){
+
     delete mat;
-  delete[] mutualArray;
+    if(matrix_calculated) delete[] mutualArray;
 }
 
 
@@ -383,6 +384,42 @@ unsigned int Residue_Representation::getNDihedrals(unsigned int residueIndex){
   return nDihedralsVec[residueIndex-1];  
 }
 
+vector< int > Residue_Representation::getAtoms(unsigned int residueIndex){
+  if((residueIndex<1)||(residueIndex>nResidues)){		
+        My_Error my_error(string("ERROR: REQUEST FOR THE ATOMS OF A RESIDUE WITH AN INDEX OUT OF RANGE (")+to_string(residueIndex)+string(").").c_str());
+        throw my_error;
+    }
+  return groups[residueIndex-1];  
+}
+
+vector< int > Residue_Representation::getBonds(unsigned int residueIndex){
+  if((residueIndex<1)||(residueIndex>nResidues)){		
+        My_Error my_error(string("ERROR: REQUEST FOR THE BONDS OF A RESIDUE WITH AN INDEX OUT OF RANGE (")+to_string(residueIndex)+string(").").c_str());
+        throw my_error;
+    }
+  return bondIndices[residueIndex-1];  
+}
+
+vector< int > Residue_Representation::getAngles(unsigned int residueIndex){
+  if((residueIndex<1)||(residueIndex>nResidues)){		
+        My_Error my_error(string("ERROR: REQUEST FOR THE ANGLES OF A RESIDUE WITH AN INDEX OUT OF RANGE (")+to_string(residueIndex)+string(").").c_str());
+        throw my_error;
+    }
+  return angleIndices[residueIndex-1];  
+}
+
+vector< int > Residue_Representation::getDihedrals(unsigned int residueIndex){
+  if((residueIndex<1)||(residueIndex>nResidues)){		
+        My_Error my_error(string("ERROR: REQUEST FOR THE DIHEDRALS OF A RESIDUE WITH AN INDEX OUT OF RANGE (")+to_string(residueIndex)+string(").").c_str());
+        throw my_error;
+    }
+  return dihedralIndices[residueIndex-1];  
+}
+
+std::string Residue_Representation::getAtomName(unsigned int atomNumber){
+    return mat->getAtomName(atomNumber);
+}
+
 
 //returns the mutual information according to the mode set in the constructor between the residues (indexing starts at 1)
 double Residue_Representation::getMutual(unsigned int residueIndex1,unsigned int residueIndex2){
@@ -429,5 +466,10 @@ void Residue_Representation::setMutual(unsigned int residueIndex1,unsigned int r
   smaller=residueIndex1<residueIndex2?residueIndex1:residueIndex2;
   bigger=residueIndex1<residueIndex2?residueIndex2:residueIndex1;
   mutualArray[smaller*(2*nResidues-(smaller+1))/2+bigger-1-nResidues]=value;
+}
+
+
+Entropy_Matrix* Residue_Representation::getEntropy_Matrix(){
+    return mat;
 }
 

@@ -20,7 +20,15 @@ endif
 CXX = g++
 CXXFLAGS = -O3 -Wall
 
-all : bin/BAT_builder bin/convert_BAT_to_GBAT bin/PARENT_GPU bin/MIST_openMP bin/MIST_GPU bin/get_values_from_PAR bin/hierarchical_resdiue_clusters
+all : bat mie mist analyze
+
+bat: bin/BAT_builder bin/convert_BAT_to_GBAT
+
+mie: bin/PARENT_GPU
+
+mist: bin/MIST_openMP bin/MIST_GPU 
+
+analyze: bin/get_values_from_PAR bin/hierarchical_resdiue_clusters bin/analyze_residue
 
 clean :
 	- rm -r bin
@@ -87,12 +95,15 @@ bin/get_values_from_PAR: src/analysis/get_values_from_PAR.cpp obj/io.o obj/util.
     
 bin/hierarchical_resdiue_clusters: src/analysis/hierarchical_resdiue_clusters.cpp obj/Residue_Representation.o obj/Entropy_Matrix.o obj/Arg_Parser.o obj/util.o | bin
 	$(CXX) --std=c++11 -O3 src/analysis/hierarchical_resdiue_clusters.cpp obj/Residue_Representation.o obj/Entropy_Matrix.o obj/Arg_Parser.o obj/util.o -o bin/hierarchical_resdiue_clusters $(CXXFLAGS)
+    
+    
+bin/analyze_residue: src/analysis/analyze_residue.cpp obj/Residue_Representation.o obj/Entropy_Matrix.o obj/Arg_Parser.o obj/util.o | bin
+	$(CXX) --std=c++11 -O3 src/analysis/analyze_residue.cpp obj/Residue_Representation.o obj/Entropy_Matrix.o obj/Arg_Parser.o obj/util.o -o bin/analyze_residue $(CXXFLAGS)
 
 
 bin/PARENT_GPU: src/PARENT_GPU/PARENT_GPU.cu src/PARENT_GPU/PARENT_GPU_kernels.cu obj/io.o src/util/io/io.h obj/util.o src/util/types.h | bin
 	nvcc --std=c++11 -O3 -Xptxas -O3 -Xcompiler -O3,-Wall,-fopenmp,-pthread  -gencode=arch=compute_$(CUDA_ARCH),code=\"sm_$(CUDA_ARCH),compute_$(CUDA_ARCH)\" src/PARENT_GPU/PARENT_GPU.cu obj/io.o obj/util.o -o bin/PARENT_GPU
     
-
 
 bin/MIST_openMP: src/MIST_GPU/MIST_openMP.cpp obj/io.o obj/util.o | bin
 	$(CXX) --std=c++11 -O3 -fopenmp src/MIST_GPU/MIST_openMP.cpp obj/io.o obj/util.o -o bin/MIST_openMP
@@ -120,11 +131,13 @@ checks: all
 	bin/get_values_from_PAR -p ${OUT_NAME}_MIST_GPU.par --short 2>&1 > $(OUT_NAME)_MIST_GPU.txt
 	bin/get_values_from_PAR -p ${OUT_NAME}_MIST_openMP.par --short 2>&1 > $(OUT_NAME)_MIST_openMP.txt
 	bin/hierarchical_resdiue_clusters -f ${IN_NAME}.par -gro ${IN_NAME}.gro -vmd ${OUT_NAME}.vmd -perc 0.15 -dist 0 -clustermode AVER -residuemode MAX
+	bin/analyze_residue -f ${IN_NAME}.par -resid 45 > $(OUT_NAME)_residue45.txt
 	echo; echo; echo; \
     CHECK_MIE=$$(diff $(OUT_NAME)_MIE.txt test_system/sample_output/sample_output_MIE.txt); \
     CHECK_MIST_GPU=$$(diff $(OUT_NAME)_MIST_GPU.txt test_system/sample_output/sample_output_MIST.txt); \
     CHECK_MIST_OPENMP=$$(diff $(OUT_NAME)_MIST_openMP.txt test_system/sample_output/sample_output_MIST.txt); \
-    CHECK_HIERARCHICAL=$$(diff $(OUT_NAME).vmd test_system/sample_output/sample_output.vmd); \
+    CHECK_HIERARCHICAL=$$(diff $(OUT_NAME).vmd test_system/sample_output/sample_output_hierarchical_clusters.vmd); \
+    CHECK_RESIDUE=$$(diff $(OUT_NAME)_residue45.txt test_system/sample_output/sample_output_residue45.txt); \
     if [ "$$CHECK_MIE" = "" ]; then\
         echo "PARENT_GPU: pass"; else\
         echo "PARENT_GPU: FAIL"; fi;\
@@ -137,6 +150,9 @@ checks: all
     if [ "$$CHECK_HIERARCHICAL" = "" ]; then\
         echo "hierarchical_resdiue_clusters: pass"; else\
         echo "hierarchical_resdiue_clusters: FAIL"; fi;\
+    if [ "$$CHECK_RESIDUE" = "" ]; then\
+        echo "analyze_residue: pass"; else\
+        echo "analyze_residue: FAIL"; fi;\
     rm -r ./$(RAND)
 
 

@@ -84,7 +84,7 @@ public:
       unsigned int atomNumber); // get the name of the residue of the atom with
                                 // the according number (atomnumbers start at 1)
   std::string getAtomName(
-      unsigned int atomNumber); // get the name of the residue of the atom with
+      unsigned int atomNumber); // get the name of the atom with
                                 // the according number (atomnumbers start at 1)
   std::string getMoleculeName(
       unsigned int atomNumber); // get the name of the residue of the atom with

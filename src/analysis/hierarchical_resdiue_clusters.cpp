@@ -72,7 +72,7 @@ int main(int argc, char* argv[]){
   
     if( !( ( arg_parser.exists( string("-f") ) && arg_parser.exists( string("-perc") ) && arg_parser.exists( string("-dist") ) && arg_parser.exists( string("-clustermode") ) && arg_parser.exists( string("-residuemode") ) )
         && ( (argc==11) || ( (argc==15) && arg_parser.exists( string("-vmd") ) && arg_parser.exists( string("-gro") ) ) ) ) ){
-        cerr<<"USAGE:\n"<<argv[0]<<" -p input.par -perc CutoffPercenatage -dist MinimumResidueDistance -clustermode MAX|AVER -residuemode MAX|AVER|TOTAL [-vmd output.vmd -gro input.gro]"<<endl;
+        cerr<<"USAGE:\n"<<argv[0]<<" -f input.par -perc CutoffPercenatage -dist MinimumResidueDistance -clustermode MAX|AVER -residuemode MAX|AVER|TOTAL [-vmd output.vmd -gro input.gro]"<<endl;
         return 1;
     }
     char* inputFilename = arg_parser.get("-f");
@@ -82,7 +82,7 @@ int main(int argc, char* argv[]){
     string residueMode( arg_parser.get("-residuemode") );
     
     if(((clusterMode!=string("MAX"))&&(clusterMode!=string("AVER")))||((residueMode!=string("MAX"))&&(residueMode!=string("AVER"))&&(residueMode!=string("TOTAL")))){
-        cerr<<"USAGE:\n"<<argv[0]<<" -p input.par -perc CutoffPercenatage -dist MinimumResidueDistance -clustermode MAX|AVER -residuemode MAX|AVER|TOTAL [-vmd output.vmd -gro input.gro]"<<endl;
+        cerr<<"USAGE:\n"<<argv[0]<<" -f input.par -perc CutoffPercenatage -dist MinimumResidueDistance -clustermode MAX|AVER -residuemode MAX|AVER|TOTAL [-vmd output.vmd -gro input.gro]"<<endl;
         return 1;
     }
     

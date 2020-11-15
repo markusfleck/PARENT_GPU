@@ -45,10 +45,19 @@ class Residue_Representation {
       unsigned int getNBonds(unsigned int residueIndex); //returns the number of bonds in the residue with index "residueIndex" (indexing starts at 1) 
       unsigned int getNAngles(unsigned int residueIndex); //returns the number of angles in the residue with index "residueIndex" (indexing starts at 1) 
       unsigned int getNDihedrals(unsigned int residueIndex); //returns the number of dihedrals in the residue with index "residueIndex" (indexing starts at 1)
+    
+      std::vector <int> getAtoms(unsigned int residueIndex);
+      std::vector <int> getBonds(unsigned int residueIndex);
+      std::vector <int> getAngles(unsigned int residueIndex);
+      std::vector <int> getDihedrals(unsigned int residueIndex);
+    
+    
+      std::string getAtomName(unsigned int atomNumber); // get the name of the atom with the according number (atomnumbers start at 1)
 
       double getMutual(unsigned int residueIndex1,unsigned int residueIndex2);//returns the total mutual information between the according residues (indexing starts at 1)
       void setMutual(unsigned int residueIndex1,unsigned int residueIndex2, double value);//sets the total mutual information between the according residues (indexing starts at 1)
     
+      Entropy_Matrix* getEntropy_Matrix();
     
 		
     private:
@@ -57,6 +66,8 @@ class Residue_Representation {
       int calcDihedrals;
     
       int mode;
+    
+      bool matrix_calculated = false;
     
       Entropy_Matrix* mat;
       double* mutualArray;
