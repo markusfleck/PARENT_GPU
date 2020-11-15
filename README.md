@@ -39,17 +39,17 @@ freedom. In more intuitive words, GPUs are such beasts in raw computation that p
 
 One of the strongest motivations for writing this code was the fact 
 that the calculated mutual information terms essentially form a distance matrix of interaction strengths inside molecules (or between molecules). Using these 
-terms for machine learning strongly suggests itself. In this context, stay tuned, I will release a first working use-case asap ...    
+terms for machine learning strongly suggests itself and a first program is included with this version of the code
+(a result for the Ubiquitin-UBM2 complex is shown above).
 
 # TODOs/Known Issues/Future plans
-- This code was extensively tested on my own systems. Remember, however, that code matures with the feedback of its users.
-- Due to its object-oriented and therefore encapsulated style, I hope PARENT_GPU.cu is quite friendly to other programmers who want to contribute to/fork the project. However,
-PARENT_GPU.cu is hardly documented, which is a big issue and highest in my personal priority list.
+- Update this readme for the new programs analyze_residue.cpp, analyze_residue_pair.cpp and hierarchical_residue_clusters.cpp 
+- This code was extensively tested on my own computers/molecules. Remember, however, that code matures with the feedback of its users.
 - The Entropy_Matrix class should be wrapped into Python in order to make use of its abundant machine learning libraries.
 - More than 95% percent of the calculation time is spent during binning histograms. Entropy calculations are quite special in this respect,
 as ~2500 bins are the usual scenario here. This greatly reduces atomicAdd penalties and therefore, many standard optimization techniques have very limited effect. The one bottle-neck on consumer graphics cards is double precision performance. It might be possible to use fixed-point arithmetic for PARENT_GPU, circumventing
 the low double precision performance of consumer-grade GPUs.
-- Currently, PARENT is a single-node, single-GPU program. In fact, parallelization across nodes/GPUs should be "relatively easy".
+- Currently, PARENT_GPU uses multiple (heterogeneous) GPUs, if available, on a single workstation. I might provide a GPU cluster version at some point in the future.  
 
 
 # 0) QUICK AND DIRTY <br />  
@@ -67,7 +67,7 @@ first lines of run.sh. Then run
     bash run.sh
     
 inside your shell. The configurational entropy output using the maximum information spanning tree (MIST) approximation 
-is contained in "output/{name_of_your_protein}_MIST.txt". 
+is contained in "output/{name_of_your_protein}_MIST.txt". The residue interaction networks are contained in output/{name_of_your_protein}.vmd (this file can be loaded in vmd for visualization).
 
 If you run the code for testing purposes only without any modifications,
 the calculation should take something like 2-5 minutes. The resulting values at the end of the
@@ -79,11 +79,11 @@ You are strongly encouraged to read the rest of this document, but at least the 
 
 # 1) INSTALLATION AND TESTING
 
-  This code uses NVIDIA CUDA, so you need to make
+  PARENT_GPU uses NVIDIA CUDA, so you need to make
   sure that your system supports this. The minimum requirements are CUDA 9.0
   as well as a graphics card supporting CUDA compute capability 6.1.
   
-  The code was developed and tested on a GTX 1060 as well as a RTX 2060 Super,
+  The code was developed and tested on a GTX 1060, GTX 1070 as well as a RTX 2060 Super,
   with CUDA 11.0 installed, Linux Mint 19.3 Tricia as the GNU/Linux operating system,
   libgromacs-dev version 2018.1-1, g++ version 7.5.0. If you run into issues, please
   consider sending me a bug report containing the according information as just given.
@@ -101,6 +101,10 @@ You are strongly encouraged to read the rest of this document, but at least the 
     PARENT_GPU: pass
     MIST_GPU: pass
     MIST_openMP: pass
+    hierarchical_resdiue_clusters: pass
+    analyze_residue: pass
+    analyze_residue_pair: pass
+
       
   
   After executing the "run.sh" script, the compiled executables are located in the folder
@@ -279,6 +283,14 @@ bin/get_values_from_PAR -p input.par [--short]
 Its output is generally large. If you are only interested in a summary, specify the --short parameter. If you plan to e. g. use these values for machine learning,
 I highly recommend to have a look at the src/util/classes/Entropy_Matrix.cpp class (in fact, I plan to wrap this class into a Python3 library).
 
+## 3.6) analyze_residue
+TODO
+
+## 3.7) analyze_residue_pair
+TODO
+
+## 3.8) hierarchical_residue_clusters
+TODO
 
 # 4) CONTACT INFORMATION
 

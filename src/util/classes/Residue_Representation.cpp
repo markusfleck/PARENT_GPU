@@ -21,7 +21,7 @@
 using namespace std;
 
 
-Residue_Representation::Residue_Representation(char const * infileInput, bool includeFull, int mode){
+Residue_Representation::Residue_Representation(char const * infileInput, bool include_full, int mode){
     this->mode = mode;
 
     if((mode!=MODE_TOTAL)&&(mode!=MODE_AVER)&&(mode!=MODE_MAX)){
@@ -84,8 +84,8 @@ Residue_Representation::Residue_Representation(char const * infileInput, bool in
               break;   
             }
           }
-          if((!includeFull)&&lead_flag){bondIndices[k].push_back(j);} //if the leading atom if the bond is in the residue, add the bond to bondIndices[k] 
-          if(includeFull&&(found==2)){bondIndices[k].push_back(j);} //if the includeFull option was set, only include the degree of freedom if all its atoms are part of the residue
+          if((!include_full)&&lead_flag){bondIndices[k].push_back(j);} //if the leading atom if the bond is in the residue, add the bond to bondIndices[k] 
+          if(include_full&&(found==2)){bondIndices[k].push_back(j);} //if the include_full option was set, only include the degree of freedom if all its atoms are part of the residue
         }
        bondIndices[k].erase(bondIndices[k].begin()); //remove the first dummy tmpintvec which was used for bondIndices[k] initialization
       }
@@ -121,8 +121,8 @@ Residue_Representation::Residue_Representation(char const * infileInput, bool in
               break;   
             }
           }
-          if((!includeFull)&&lead_flag){angleIndices[k].push_back(j);} //if the leading atom if the angle is in the residue, add the angle to angleIndices[k] 
-          if(includeFull&&(found==3)){angleIndices[k].push_back(j);} //if the includeFull option was set, only include the degree of freedom if all its atoms are part of the residue
+          if((!include_full)&&lead_flag){angleIndices[k].push_back(j);} //if the leading atom if the angle is in the residue, add the angle to angleIndices[k] 
+          if(include_full&&(found==3)){angleIndices[k].push_back(j);} //if the include_full option was set, only include the degree of freedom if all its atoms are part of the residue
         }
        angleIndices[k].erase(angleIndices[k].begin()); //remove the first dummy tmpintvec which was used for angleIndices[k] initialization
       }
@@ -164,8 +164,8 @@ Residue_Representation::Residue_Representation(char const * infileInput, bool in
               break;   
             }
           }
-          if((!includeFull)&&lead_flag){dihedralIndices[k].push_back(j);} //if the leading atom if the dihedral is in the residue, add the dihedral to dihedralIndices[k] 
-          if(includeFull&&(found==4)){dihedralIndices[k].push_back(j);} //if the includeFull option was set, only include the degree of freedom if all its atoms are part of the residue
+          if((!include_full)&&lead_flag){dihedralIndices[k].push_back(j);} //if the leading atom if the dihedral is in the residue, add the dihedral to dihedralIndices[k] 
+          if(include_full&&(found==4)){dihedralIndices[k].push_back(j);} //if the include_full option was set, only include the degree of freedom if all its atoms are part of the residue
         }
        dihedralIndices[k].erase(dihedralIndices[k].begin()); //remove the first dummy tmpintvec which was used for dihedralIndices[k] initialization
       }

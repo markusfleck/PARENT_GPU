@@ -28,7 +28,7 @@ mie: bin/PARENT_GPU
 
 mist: bin/MIST_openMP bin/MIST_GPU 
 
-analyze: bin/get_values_from_PAR bin/hierarchical_resdiue_clusters bin/analyze_residue bin/analyze_residue_pair
+analyze: bin/get_values_from_PAR bin/hierarchical_residue_clusters bin/analyze_residue bin/analyze_residue_pair
 
 clean :
 	- rm -r bin
@@ -93,8 +93,8 @@ bin/get_values_from_PAR: src/analysis/get_values_from_PAR.cpp obj/io.o obj/util.
 	$(CXX) --std=c++11 -O3 src/analysis/get_values_from_PAR.cpp obj/io.o obj/util.o -o bin/get_values_from_PAR $(CXXFLAGS)
     
     
-bin/hierarchical_resdiue_clusters: src/analysis/hierarchical_resdiue_clusters.cpp obj/Residue_Representation.o obj/Entropy_Matrix.o obj/Arg_Parser.o obj/util.o | bin
-	$(CXX) --std=c++11 -O3 src/analysis/hierarchical_resdiue_clusters.cpp obj/Residue_Representation.o obj/Entropy_Matrix.o obj/Arg_Parser.o obj/util.o -o bin/hierarchical_resdiue_clusters $(CXXFLAGS)
+bin/hierarchical_residue_clusters: src/analysis/hierarchical_residue_clusters.cpp obj/Residue_Representation.o obj/Entropy_Matrix.o obj/Arg_Parser.o obj/util.o | bin
+	$(CXX) --std=c++11 -O3 src/analysis/hierarchical_residue_clusters.cpp obj/Residue_Representation.o obj/Entropy_Matrix.o obj/Arg_Parser.o obj/util.o -o bin/hierarchical_residue_clusters $(CXXFLAGS)
     
     
 bin/analyze_residue: src/analysis/analyze_residue.cpp obj/Residue_Representation.o obj/Entropy_Matrix.o obj/Arg_Parser.o obj/util.o | bin
@@ -134,7 +134,7 @@ checks: all
 	bin/get_values_from_PAR -p ${OUT_NAME}.par --short 2>&1 > $(OUT_NAME)_MIE.txt
 	bin/get_values_from_PAR -p ${OUT_NAME}_MIST_GPU.par --short 2>&1 > $(OUT_NAME)_MIST_GPU.txt
 	bin/get_values_from_PAR -p ${OUT_NAME}_MIST_openMP.par --short 2>&1 > $(OUT_NAME)_MIST_openMP.txt
-	bin/hierarchical_resdiue_clusters -f ${IN_NAME}.par -gro ${IN_NAME}.gro -vmd ${OUT_NAME}.vmd -perc 0.15 -dist 0 -clustermode AVER -residuepairmode MAX -residuemode LEAD
+	bin/hierarchical_residue_clusters -f ${IN_NAME}.par -gro ${IN_NAME}.gro -vmd ${OUT_NAME}.vmd -perc 0.15 -dist 0 -clustermode AVER -residuepairmode MAX -residuemode LEAD
 	bin/analyze_residue -f ${IN_NAME}.par -resid 45 > $(OUT_NAME)_residue45.txt
 	bin/analyze_residue_pair -f ${IN_NAME}.par -resid1 45 -resid2 48 > $(OUT_NAME)_residue_pair_45_48.txt
 	echo; echo; echo; \
@@ -154,8 +154,8 @@ checks: all
         echo "MIST_openMP: pass"; else\
         echo "MIST_openMP: FAIL"; fi;\
     if [ "$$CHECK_HIERARCHICAL" = "" ]; then\
-        echo "hierarchical_resdiue_clusters: pass"; else\
-        echo "hierarchical_resdiue_clusters: FAIL"; fi;\
+        echo "hierarchical_residue_clusters: pass"; else\
+        echo "hierarchical_residue_clusters: FAIL"; fi;\
     if [ "$$CHECK_RESIDUE" = "" ]; then\
         echo "analyze_residue: pass"; else\
         echo "analyze_residue: FAIL"; fi;\

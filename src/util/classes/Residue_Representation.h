@@ -33,7 +33,7 @@
 
 class Residue_Representation {
     public:
-      Residue_Representation(char const * infileInput,bool includeFull=false, int mode=MODE_TOTAL);
+      Residue_Representation(char const * infileInput,bool include_full=false, int mode=MODE_TOTAL);
       ~Residue_Representation();
       void calculate_matrix();
     
