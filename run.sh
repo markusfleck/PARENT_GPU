@@ -51,3 +51,4 @@ echo -e "\n\n\n"; bin/hierarchical_resdiue_clusters -f ${OUT_NAME}.par -gro ${IN
 
 echo -e "\n\n\n"; bin/analyze_residue -f ${OUT_NAME}.par -resid ${RESID1} | tee ${OUT_NAME}_residue${RESID1}.txt
 
+echo -e "\n\n\n"; bin/analyze_residue_pair -f ${OUT_NAME}.par -resid1 ${RESID1} -resid2 ${RESID2} | tee ${OUT_NAME}_residue_pair_${RESID1}_${RESID2}.txt
