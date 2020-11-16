@@ -126,7 +126,7 @@ CPU_RAM = 0.1
 GPU_RAM = 0.1
 checks: all
 	mkdir ./$(RAND)
-	bin/BAT_builder -t $(IN_NAME).top -x $(IN_NAME).xtc -o $(OUT_NAME).bat -bb "CA C N H1 O1"
+	bin/BAT_builder -t $(IN_NAME).top -x $(IN_NAME).xtc -o $(OUT_NAME).bat --bb "CA C N H1 O1"
 	bin/convert_BAT_to_GBAT -f $(OUT_NAME).bat -o $(OUT_NAME).gbat --ram $(CPU_RAM)
 	bin/PARENT_GPU -f $(OUT_NAME).gbat -o $(OUT_NAME).par -b 50 --cpu_ram $(CPU_RAM) --gpu_ram $(GPU_RAM)
 	bin/MIST_GPU -f $(OUT_NAME).par -o $(OUT_NAME)_MIST_GPU.par
@@ -134,9 +134,9 @@ checks: all
 	bin/get_values_from_PAR -p ${OUT_NAME}.par --short 2>&1 > $(OUT_NAME)_MIE.txt
 	bin/get_values_from_PAR -p ${OUT_NAME}_MIST_GPU.par --short 2>&1 > $(OUT_NAME)_MIST_GPU.txt
 	bin/get_values_from_PAR -p ${OUT_NAME}_MIST_openMP.par --short 2>&1 > $(OUT_NAME)_MIST_openMP.txt
-	bin/hierarchical_residue_clusters -f ${IN_NAME}.par -gro ${IN_NAME}.gro -vmd ${OUT_NAME}.vmd -perc 0.15 -dist 0 -clustermode AVER -residuepairmode MAX -residuemode LEAD
-	bin/analyze_residue -f ${IN_NAME}.par -resid 45 > $(OUT_NAME)_residue45.txt
-	bin/analyze_residue_pair -f ${IN_NAME}.par -resid1 45 -resid2 48 > $(OUT_NAME)_residue_pair_45_48.txt
+	bin/hierarchical_residue_clusters -f ${IN_NAME}.par --gro ${IN_NAME}.gro --vmd ${OUT_NAME}.vmd --perc 0.15 --dist 0 --clustermode AVER --residuepairmode MAX --residuemode LEAD
+	bin/analyze_residue -f ${IN_NAME}.par --resid 45 > $(OUT_NAME)_residue45.txt
+	bin/analyze_residue_pair -f ${IN_NAME}.par --resid1 45 --resid2 48 > $(OUT_NAME)_residue_pair_45_48.txt
 	echo; echo; echo; \
     CHECK_MIE=$$(diff $(OUT_NAME)_MIE.txt test_system/sample_output/sample_output_MIE.txt); \
     CHECK_MIST_GPU=$$(diff $(OUT_NAME)_MIST_GPU.txt test_system/sample_output/sample_output_MIST.txt); \

@@ -28,23 +28,23 @@ int main(int argc, char* argv[]){
     unsigned int resid1;
     unsigned int resid2;
   
-    if( !( arg_parser.exists( string("-f") ) && arg_parser.exists( string("-resid1") )  && arg_parser.exists( string("-resid2") )&& (argc==7) ) ){
-        cerr<<"USAGE:\n"<<argv[0]<<" -f input.par -resid1 #residue1 -resid2 #residue2"<<endl;
+    if( !( arg_parser.exists( string("-f") ) && arg_parser.exists( string("--resid1") )  && arg_parser.exists( string("--resid2") )&& (argc==7) ) ){
+        cerr<<"USAGE:\n"<<argv[0]<<" -f input.par --resid1 #residue1 --resid2 #residue2"<<endl;
         return 1;
     }
     
     if ( strcmp( arg_parser.get_ext( arg_parser.get("-f") ) , "par") ) {
     // check for the extensions of the input file
-    cerr<<"USAGE:\n"<<argv[0]<<" -f input.par -resid1 #residue1 -resid2 #residue2"<<endl;
+    cerr<<"USAGE:\n"<<argv[0]<<" -f input.par --resid1 #residue1 --resid2 #residue2"<<endl;
     exit(EXIT_FAILURE);
   }
-  if (sscanf(arg_parser.get("-resid1"), "%ud", &resid1) != 1) {
+  if (sscanf(arg_parser.get("--resid1"), "%ud", &resid1) != 1) {
     // read the residue number and check for correctness
     cerr << "ERROR: Could not read the first residue number from command line! Aborting"
          << endl;
     exit(EXIT_FAILURE);
   }
-  if (sscanf(arg_parser.get("-resid2"), "%ud", &resid2) != 1) {
+  if (sscanf(arg_parser.get("--resid2"), "%ud", &resid2) != 1) {
     // read the residue number and check for correctness
     cerr << "ERROR: Could not read the second residue number from command line! Aborting"
          << endl;
@@ -287,9 +287,9 @@ int main(int argc, char* argv[]){
     cout << "TOTAL 1D ANGLES ENTROPY RESIDUE "<<resid1<< " = " << a_ent1 << endl;
     cout << "TOTAL 1D DIHEDRALS ENTROPY RESIDUE "<<resid1<< " = " << d_ent1 << endl;
     cout<<endl;
-    cout << "TOTAL 1D BONDS ENTROPY RESIDUE "<<resid2<< " = " << b_ent1 << endl;
-    cout << "TOTAL 1D ANGLES ENTROPY RESIDUE "<<resid2<< " = " << a_ent1 << endl;
-    cout << "TOTAL 1D DIHEDRALS ENTROPY RESIDUE "<<resid2<< " = " << d_ent1 << endl;
+    cout << "TOTAL 1D BONDS ENTROPY RESIDUE "<<resid2<< " = " << b_ent2 << endl;
+    cout << "TOTAL 1D ANGLES ENTROPY RESIDUE "<<resid2<< " = " << a_ent2 << endl;
+    cout << "TOTAL 1D DIHEDRALS ENTROPY RESIDUE "<<resid2<< " = " << d_ent2 << endl;
     cout<<endl;
     cout << "TOTAL 2D BONDS-BONDS MUTUAL INFORMATION BETWEEN RESIDUES = " << bb_mut<< endl;
     cout << "TOTAL 2D BONDS-ANGLES MUTUAL INFORMATION BETWEEN RESIDUES = " << ba_mut<< endl;

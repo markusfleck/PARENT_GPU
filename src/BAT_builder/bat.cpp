@@ -31,20 +31,20 @@ int main(int argc, char* argv[])
     
     Arg_Parser arg_parser(argc, argv);
     if(argc==9){ //conversion from Cartesians to BAT in double precision
-					if(!arg_parser.exists("-t")||!arg_parser.exists("-x")||!arg_parser.exists("-o")||!arg_parser.exists("-bb")){
-            cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat -bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
+					if(!arg_parser.exists("-t")||!arg_parser.exists("-x")||!arg_parser.exists("-o")||!arg_parser.exists("--bb")){
+            cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat --bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
 						return 1;
 					}
         vector <std::string> backboneAtomNames;
 
         //check if command line arguments were supplied correctly, else put out help and quit
         if(((strcmp(arg_parser.get_ext(arg_parser.get("-t")),"top"))||(strcmp(arg_parser.get_ext(arg_parser.get("-x")),"xtc"))||(strcmp(arg_parser.get_ext(arg_parser.get("-o")),"bat")))) {
-            cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat -bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
+            cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat --bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
             return 1;
         }
 
         //Read in the requested names of backbone atoms
-        char* ptr = strtok (arg_parser.get("-bb")," ");
+        char* ptr = strtok (arg_parser.get("--bb")," ");
         while (ptr != NULL)
         {
             backboneAtomNames.push_back(string(ptr));
@@ -65,8 +65,8 @@ int main(int argc, char* argv[])
 		
 		}
     else if(argc==10) { //conversion from Cartesians to BAT in single precision
-					if(!arg_parser.exists("-t")||!arg_parser.exists("-x")||!arg_parser.exists("-o")||!arg_parser.exists("-bb")||!arg_parser.exists("--single_precision")){
-            cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat -bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
+					if(!arg_parser.exists("-t")||!arg_parser.exists("-x")||!arg_parser.exists("-o")||!arg_parser.exists("--bb")||!arg_parser.exists("--single_precision")){
+            cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat --bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
 						return 1;
 					}
                 
@@ -74,12 +74,12 @@ int main(int argc, char* argv[])
 
         //check if command line arguments were supplied correctly, else put out help and quit
         if(((strcmp(arg_parser.get_ext(arg_parser.get("-t")),"top"))||(strcmp(arg_parser.get_ext(arg_parser.get("-x")),"xtc"))||(strcmp(arg_parser.get_ext(arg_parser.get("-o")),"bat")))) {
-            cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat -bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
+            cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat --bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
             return 1;
         }
 
         //Read in the requested names of backbone atoms
-        char* ptr = strtok (arg_parser.get("-bb")," ");
+        char* ptr = strtok (arg_parser.get("--bb")," ");
         while (ptr != NULL)
         {
             backboneAtomNames.push_back(string(ptr));
@@ -102,13 +102,13 @@ int main(int argc, char* argv[])
     }
     else  if (argc==5) { // conversion from BAT to Cartesians
 					if(!arg_parser.exists("-b")||!arg_parser.exists("-o")){
-            cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat -bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
+            cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat --bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
 						return 1;
 					}
 
         //check if command line arguments were supplied correctly, else put out help and quit
         if(((strcmp(arg_parser.get_ext(arg_parser.get("-b")),"bat"))||(strcmp(arg_parser.get_ext(arg_parser.get("-o")),"xtc")))) {
-            cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat -bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
+            cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat --bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
             return 1;
         }
 
@@ -119,7 +119,7 @@ int main(int argc, char* argv[])
 
     }
     else {
-            cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat -bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
+            cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat --bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
         return 1;
     }
 

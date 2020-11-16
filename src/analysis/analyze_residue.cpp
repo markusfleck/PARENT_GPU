@@ -27,17 +27,17 @@ int main(int argc, char* argv[]){
     Arg_Parser arg_parser(argc, argv);
     unsigned int resid;
   
-    if( !( arg_parser.exists( string("-f") ) && arg_parser.exists( string("-resid") ) && (argc==5) ) ){
-        cerr<<"USAGE:\n"<<argv[0]<<" -f input.par -resid #residue"<<endl;
+    if( !( arg_parser.exists( string("-f") ) && arg_parser.exists( string("--resid") ) && (argc==5) ) ){
+        cerr<<"USAGE:\n"<<argv[0]<<" -f input.par --resid #residue"<<endl;
         return 1;
     }
     
     if ( strcmp( arg_parser.get_ext( arg_parser.get("-f") ) , "par") ) {
     // check for the extensions of the input file
-    cerr<<"USAGE:\n"<<argv[0]<<" -f input.par -resid #residue"<<endl;
+    cerr<<"USAGE:\n"<<argv[0]<<" -f input.par --resid #residue"<<endl;
     exit(EXIT_FAILURE);
   }
-  if (sscanf(arg_parser.get("-resid"), "%ud", &resid) != 1) {
+  if (sscanf(arg_parser.get("--resid"), "%ud", &resid) != 1) {
     // read the residue number and check for correctness
     cerr << "ERROR: Could not read the residue number from command line! Aborting"
          << endl;
