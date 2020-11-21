@@ -37,7 +37,7 @@ Entropy_Matrix::Entropy_Matrix(char const *infileInput) {
 
   try {
     read_PAR_header();
-  } catch (My_Error my_error) {
+  } catch (const My_Error& my_error) {
     throw my_error;
   } catch (...) {
     My_Error my_error((string("ERROR WHILE READING THE HEADER OF THE FILE ") +
@@ -51,7 +51,7 @@ Entropy_Matrix::Entropy_Matrix(char const *infileInput) {
 
   try {
     read_PAR_body();
-  } catch (My_Error my_error) {
+  } catch (const My_Error& my_error) {
     throw my_error;
   } catch (...) {
     My_Error my_error((string("ERROR WHILE READING THE BODY OF THE FILE ") +
@@ -132,7 +132,7 @@ Entropy_Matrix::Entropy_Matrix(char const *bat_file, PRECISION *storage,
 
   try {
     read_BAT_header();
-  } catch (My_Error my_error) {
+  } catch (const My_Error& my_error) {
     throw my_error;
   } catch (...) {
     My_Error my_error((string("ERROR WHILE READING THE HEADER OF THE FILE ") +
@@ -197,7 +197,7 @@ void Entropy_Matrix::write(char const *outfileInput) {
 
   try {
     write_PAR_header();
-  } catch (My_Error my_error) {
+  } catch (const My_Error& my_error) {
     throw my_error;
   } catch (...) {
     My_Error my_error((string("ERROR WHILE WRITING THE HEADER OF THE FILE ") +
@@ -208,7 +208,7 @@ void Entropy_Matrix::write(char const *outfileInput) {
 
   try {
     write_PAR_body();
-  } catch (My_Error my_error) {
+  } catch (const My_Error& my_error) {
     throw my_error;
   } catch (...) {
     My_Error my_error((string("ERROR WRITING THE BODY OF THE FILE ") +

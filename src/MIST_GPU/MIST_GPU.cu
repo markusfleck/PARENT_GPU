@@ -272,7 +272,7 @@ int main(int argc, char* argv[]){
         cudaDeviceReset(); // clean up
         return 0;
     } 
-    catch (My_Error my_error) { // catch errors using the convenient C++ style
+    catch (const My_Error& my_error) { // catch errors using the convenient C++ style
         cerr << my_error.what() << endl;
         exit(EXIT_FAILURE);
     }

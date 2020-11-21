@@ -165,7 +165,7 @@ void Bat::read_BAT_header(char const *infile_str) {
       }
 
       dofs_begin = infile.tellg();
-    } catch (My_Error my_error) {
+    } catch (const My_Error& my_error) {
         throw my_error;
         } catch (...) {
         My_Error my_error((string("ERROR WHILE READING THE HEADER OF THE FILE ") +
@@ -271,7 +271,7 @@ void Bat::write_BAT_header(char const* outfile_str, int version_tmp) { //version
                             // system in single precision (float)
         
       }
-    } catch (My_Error my_error) {
+    } catch (const My_Error& my_error) {
         throw my_error;
     } catch (...) {
         My_Error my_error((string("ERROR WHILE WRITING THE HEADER OF THE FILE ") +
@@ -381,7 +381,7 @@ void Bat::read_BAT_frame() {
           d_counter++;
         }
       }
-    } catch (My_Error my_error) {
+    } catch (const My_Error& my_error) {
         throw my_error;
     } catch (...) {
         My_Error my_error((string("ERROR WHILE READING A FRAME FROM THE FILE ") +
@@ -494,7 +494,7 @@ void Bat::write_BAT_frame() {
           
         }
       }
-    } catch (My_Error my_error) {
+    } catch (const My_Error& my_error) {
         throw my_error;
     } catch (...) {
         My_Error my_error((string("ERROR WHILE WRITING A FRAME TO THE FILE ") +
@@ -557,7 +557,7 @@ void Bat::write_GBAT_frame(unsigned int frame_number){
         }
 
     
-    } catch (My_Error my_error) {
+    } catch (const My_Error& my_error) {
         throw my_error;
     } catch (...) {
         My_Error my_error((string("ERROR WHILE WRITING A FRAME TO THE FILE ") +
@@ -575,7 +575,7 @@ void Bat::write_GBAT(char const* outfile_str){ //slow conversion due to scattere
             read_BAT_frame();
             write_GBAT_frame(i);
         }
-    } catch (My_Error my_error) {
+    } catch (const My_Error& my_error) {
         throw my_error;
     } catch (...) {
         My_Error my_error((string("ERROR WHILE WRITING GBAT ") +
@@ -729,7 +729,7 @@ void Bat::load_dofs(T* type_addr[3], int type_id_start[3], int type_id_end[3], u
                           .c_str());
             throw my_error;
         }
-    } catch (My_Error my_error) {
+    } catch (const My_Error& my_error) {
         throw my_error;
     } catch (...) {
         My_Error my_error((string("ERROR WHILE READING BAT ") +
@@ -796,7 +796,7 @@ void Bat::load_externals(float* tpd, T* externals) {//---------------------
             throw my_error;
         }
         
-    } catch (My_Error my_error) {
+    } catch (const My_Error& my_error) {
         throw my_error;
     } catch (...) {
         My_Error my_error((string("ERROR WHILE READING BAT ") +

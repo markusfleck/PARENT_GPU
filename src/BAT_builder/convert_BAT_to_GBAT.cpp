@@ -150,7 +150,7 @@ int main(int argc, char *argv[]) {
           
         }
         cout << "GBAT written successsfully." << endl << endl << endl;
-    } catch (My_Error my_error) {
+    } catch (const My_Error& my_error) {
         throw my_error;
     } catch (...) {
         My_Error my_error((string("ERROR WHILE WRITING GBAT! ABORTING."))
