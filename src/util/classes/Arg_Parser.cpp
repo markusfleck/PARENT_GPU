@@ -14,6 +14,8 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "Arg_Parser.h"
+#include "My_Error.cpp"
+
 
 using namespace std;
 
@@ -36,20 +38,23 @@ bool Arg_Parser::exists(const string &option) {
   return find(begin, end, option) != end;
 }
 
+
 char* Arg_Parser::get_ext(char* file_str){
-    char *ptr, *type;
-    char delimiter[] = ".";
-    string tmp_str = string(file_str);
+    unsigned int counter = 0;
+    int last_pos = -1;
 
-    ptr = strtok((char*)tmp_str.c_str(), delimiter);
-    type = ptr;
-    while (ptr != NULL) {
-        type = ptr;
-        ptr = strtok(NULL, delimiter);
+    while(file_str[counter]!='\0'){
+        if(file_str[counter]=='.') last_pos = counter;
+        counter++;
     }
-    return type;
+    if (last_pos == -1){
+        My_Error my_error((string("ERROR: FILE ") +
+                       string(file_str) + string(" HAS NO EXTENSION! ABORTING."))
+                          .c_str());
+        throw my_error;
+    }
+    return file_str + last_pos + 1;
 }
-
 
 
 
