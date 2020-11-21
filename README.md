@@ -78,6 +78,7 @@ You are strongly encouraged to read the rest of this document, but at least the 
 
 
 # 1) INSTALLATION AND TESTING
+## 1.1) Basics
 
   PARENT_GPU uses NVIDIA CUDA, so you need to make
   sure that your system supports this. The minimum requirements are CUDA 9.0
@@ -85,7 +86,8 @@ You are strongly encouraged to read the rest of this document, but at least the 
   
   The code was developed and tested on a GTX 1060, GTX 1070 as well as a RTX 2060 Super,
   with CUDA 11.0 installed, Linux Mint 19.3 Tricia as the GNU/Linux operating system,
-  libgromacs-dev version 2018.1-1, g++ version 7.5.0. If you run into issues, please
+  libgromacs version 2018.1-1, g++ version 7.5.0. libgromacs versions >= 2019 are not supported, 
+  see below for fixing compilation errors concerning "gromacs/fileio/xtcio.h". If you run into other issues, please
   consider sending me a bug report containing the according information as just given.
 
   Sample trajectory and topology files are shipped with this package.
@@ -111,7 +113,43 @@ You are strongly encouraged to read the rest of this document, but at least the 
   "bin". For compilation, the "Makefile" in the top directory is processed by "run.sh", so this is where you might 
   want to start troubleshooting (or maybe fine tuning). Note that the Makefile supports compiling for a CUDA capability higher than
   6.1 by issuing ```make CUDA_ARCH={cuda_capability_without_dot}```.
-  
+
+## 1.2) Troubleshooting
+### 1.2.1) Fixing "fatal error: gromacs/fileio/xtcio.h: No such file or directory"
+You need to have a libgromacs version <= 2018.8 installed. Newer versions do not include the functions declared in xtcio.h, which is used for reading the GROMACS trajectory .xtc files. Ubuntu 18.04 and Linux mint 19.3 feature the libgromacs-dev package version 2018.1-1, so
+
+    sudo apt install libgromacs-dev
+
+is sufficient here. Older versions should probably work as well. If your operating system is Ubuntu >=20/Linux Mint >=20 or another GNU/Linux distribution, applying the following steps analogously should do the trick:
+
+    mkdir -p ~/programs/gromacs-2018.8_build/
+    cd ~/programs/gromacs-2018.8_build/
+    wget ftp://ftp.gromacs.org/pub/gromacs/gromacs-2018.8.tar.gz
+    tar xvfz gromacs-2018.8.tar.gz
+    mkdir -p gromacs-2018.8/build
+    cd gromacs-2018.8/build
+
+If you have a gcc version < 4.8.1 or >=9, install e. g. gcc-8 and use it for compilation.
+On Ubuntu/Linux Mint/Debian and relatives issue:
+
+    sudo apt install gcc-8
+    export CC=`which gcc-8`
+
+Continue with (you can try to speed up the compilation by using multiple cores: use e. g. make -j4 on a quad core machine):
+
+    cmake .. -DGMX_BUILD_OWN_FFTW=ON -DREGRESSIONTEST_DOWNLOAD=ON -DCMAKE_INSTALL_PREFIX=~/programs/gromacs-2018.8
+    make
+    make check
+    make install
+
+Last but not least, you need to set environment variables. On Ubuntu/Linux Mint/Debian and relatives, this is done by:
+
+    export CPLUS_INCLUDE_PATH=~/programs/gromacs-2018.8/include:$CPLUS_INCLUDE_PATH
+    export LIBRARY_PATH=~/programs/gromacs-2018.8/lib:$LIBRARY_PATH
+    export LD_LIBRARY_PATH=~/programs/gromacs-2018.8/lib:$LD_LIBRARY_PATH
+
+You might consider adding the above three lines to your ~/.bashrc file. Note, however, that setting these environment variables might interfere with another GROMACS installation you might have. In this case, comment the lines in your .bashrc and use a fresh shell before using GROMACS again.  
+   
   
 #  2) RUNNING YOUR OWN TRAJECTORIES
   
