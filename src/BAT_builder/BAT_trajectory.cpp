@@ -158,7 +158,7 @@ using namespace std;
             if (read_BAT_header(&infile,&double_prec,&numframes,&dihedrals_top,&massvec, &residues,&residueNumbers,&atomNames,&belongsToMolecule)) {
                 exit(EXIT_FAILURE);   //read the header of the .bat file
             }
-            xtc_ofile = open_xtc((char*)trjFileIn.c_str(), "w"); //open the .xtc input file
+            xtc_ofile = open_xtc((char*)trjFileOut.c_str(), "w"); //open the .xtc input file
             if(xtc_ofile==NULL) {
                 cerr << "ERROR: UNABLE TO OPEN FILE "<<trjFileOut.c_str()<<" !\n";
                 exit(EXIT_FAILURE);
@@ -195,7 +195,7 @@ using namespace std;
             }
             infile.close();
             if(step!=numframes) {
-                cerr << "ERROR: COULD ONLY PROCESS "<<step<<"FRAMES OUT OF "<<numframes<<" !\n";
+                cerr << "ERROR: COULD ONLY PROCESS "<<step<<" FRAMES OUT OF "<<numframes<<" !\n";
                 exit(EXIT_FAILURE);
             }
         } else {
