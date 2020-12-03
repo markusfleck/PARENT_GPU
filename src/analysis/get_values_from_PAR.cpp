@@ -53,12 +53,11 @@ int main(int argc, char *argv[]) {
   
   Arg_Parser arg_parser(argc, argv);
 
-  if ((argc == 3) && (arg_parser.exists("-p"))) {
-    inputFilename = arg_parser.get("-p");
+  if (argc == 3) {
+    inputFilename = (char*) arg_parser.get("-p");
     longOutput = true;
-  } else if ((argc == 4) && arg_parser.exists("-p") &&
-             arg_parser.exists("--short")) {
-    inputFilename = arg_parser.get("-p");
+  } else if ( (argc == 4) && arg_parser.exists("--short") ) {
+    inputFilename = (char*) arg_parser.get("-p");
     longOutput = false;
   } else {
     cerr << "USAGE:\n" << argv[0] << " -p input.par [--short]" << endl;

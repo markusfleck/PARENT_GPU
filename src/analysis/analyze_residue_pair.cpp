@@ -28,12 +28,12 @@ int main(int argc, char* argv[]){
     unsigned int resid1;
     unsigned int resid2;
   
-    if( !( arg_parser.exists( string("-f") ) && arg_parser.exists( string("--resid1") )  && arg_parser.exists( string("--resid2") )&& (argc==7) ) ){
+    if( !( arg_parser.exists("--resid1")  && arg_parser.exists("--resid2") && (argc==7) ) ){
         cerr<<"USAGE:\n"<<argv[0]<<" -f input.par --resid1 #residue1 --resid2 #residue2"<<endl;
         return 1;
     }
     
-    if ( strcmp( arg_parser.get_ext( arg_parser.get("-f") ) , "par") ) {
+    if ( !arg_parser.check_ext("-f", "par") ){
     // check for the extensions of the input file
     cerr<<"USAGE:\n"<<argv[0]<<" -f input.par --resid1 #residue1 --resid2 #residue2"<<endl;
     exit(EXIT_FAILURE);

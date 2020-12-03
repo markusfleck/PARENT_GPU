@@ -1174,30 +1174,19 @@ int main(int argc, char *argv[]) {
   vector<string> atomNames;
   vector<string> belongsToMolecule;
 
-  if (argc != 11) {
+    Arg_Parser arg_parser(argc, argv);
+
+  if ((argc != 11) || !arg_parser.exists("-b") || !arg_parser.exists("--cpu_ram") || !arg_parser.exists("--gpu_ram") ) {
     cerr << "USAGE: " << argv[0] << " -f input.[g]bat -o entropy.par -b #bins --cpu_ram #GiB --gpu_ram #GiB\n";
     exit(EXIT_FAILURE);
   }
-
-  Arg_Parser arg_parser(argc, argv);
-  if (!arg_parser.exists("-f") ||
-      !arg_parser.exists("-o") ||
-      !arg_parser.exists("-b")) {
-    // check for correct command line options
-    cerr << "USAGE: " << argv[0] << " -f input.[g]bat -o entropy.par -b #bins --cpu_ram #GiB --gpu_ram #GiB\n";
-    exit(EXIT_FAILURE);
-  }
-
-  if ((strcmp(arg_parser.get_ext(arg_parser.get("-f")),
-             "bat")
-        && strcmp(arg_parser.get_ext(arg_parser.get("-f")),
-             "gbat"))||
-      strcmp(arg_parser.get_ext(arg_parser.get("-o")),
-             "par")) {
+         
+ if( !( arg_parser.check_ext("-f","bat") || arg_parser.check_ext("-f","gbat") ) || !arg_parser.check_ext("-o","par") ){
     // check for the extensions of the input and output file
     cerr << "USAGE: " << argv[0] << " -f input.[g]bat -o entropy.par -b #bins --cpu_ram #GiB --gpu_ram #GiB\n";
     exit(EXIT_FAILURE);
   }
+
   if (sscanf(arg_parser.get("-b"), "%ud", &n_bins) != 1) {
     // read the number of bins and check for correctness
     cerr << "ERROR: Could not read number of bins from command line! Aborting"

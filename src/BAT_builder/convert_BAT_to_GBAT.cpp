@@ -31,17 +31,8 @@ int main(int argc, char *argv[]) {
       }
 
       Arg_Parser arg_parser(argc, argv);
-      if (!arg_parser.exists("-f") ||
-          !arg_parser.exists("-o")) {
-        // check for correct command line options
-        cerr << "USAGE: " << argv[0] << " -f input.bat -o ouput.gbat --ram #GiB\n";
-        exit(EXIT_FAILURE);
-      }
 
-      if (strcmp(arg_parser.get_ext(arg_parser.get("-f")),
-                 "bat") ||
-          strcmp(arg_parser.get_ext(arg_parser.get("-o")),
-                 "gbat")) {
+      if ( !arg_parser.check_ext("-f", "bat") || !arg_parser.check_ext("-o", "gbat") ){
         // check for the extensions of the input and output file
         cerr << "USAGE: " << argv[0] << " -f input.bat -o ouput.gbat --ram #GiB\n";
         exit(EXIT_FAILURE);
@@ -49,7 +40,6 @@ int main(int argc, char *argv[]) {
       
       Bat bat(arg_parser.get("-f"));
       cout<<"Converting "<<arg_parser.get("-f")<< " to GBAT."<<endl;
-      //~ bat.write_GBAT(arg_parser.get("-o"));
       
       bat.write_BAT_header(arg_parser.get("-o"), 4);
       

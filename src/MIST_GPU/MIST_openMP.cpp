@@ -51,17 +51,8 @@ int main(int argc, char *argv[]){
     }
 
     Arg_Parser arg_parser(argc, argv);
-    if (!arg_parser.exists("-f") ||
-        !arg_parser.exists("-o")) {
-        // check for correct command line options
-        cerr << "USAGE: " << argv[0] << " -f input.par -o output.par\n";
-        exit(EXIT_FAILURE);
-    }
 
-    if (strcmp(arg_parser.get_ext(arg_parser.get("-f")),
-             "par") ||
-      strcmp(arg_parser.get_ext(arg_parser.get("-o")),
-             "par")) {
+    if ( !arg_parser.check_ext("-f", "par") || !arg_parser.check_ext("-o", "par") ) {
     // check for the extensions of the input and output file
     cerr << "USAGE: " << argv[0] << " -f input.par -o output.par\n";
     exit(EXIT_FAILURE);

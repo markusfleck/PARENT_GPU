@@ -70,14 +70,14 @@ int main(int argc, char* argv[]){
 
     Arg_Parser arg_parser(argc, argv);
   
-    if( !( ( arg_parser.exists( string("-f") ) && arg_parser.exists( string("--perc") ) && arg_parser.exists( string("--dist") ) && arg_parser.exists( string("--clustermode") ) && arg_parser.exists( string("--residuepairmode") ) && arg_parser.exists( string("--residuemode") ) )
-        && ( (argc==13) || ( (argc==17) && arg_parser.exists( string("--vmd") ) && arg_parser.exists( string("--gro") ) ) ) ) ){
+    if( !( ( arg_parser.exists("-f") && arg_parser.exists("--perc") && arg_parser.exists("--dist") && arg_parser.exists("--clustermode") && arg_parser.exists("--residuepairmode") && arg_parser.exists("--residuemode") )
+        && ( (argc==13) || ( (argc==17) && arg_parser.exists("--vmd") && arg_parser.exists("--gro") ) ) ) ){
         cerr<<"USAGE:\n"<<argv[0]<<" -f input.par --perc CutoffPercenatage --dist MinimumResidueDistance --clustermode MAX|AVER --residuepairmode MAX|AVER|TOTAL --residuemode FULL|LEAD [--vmd output.vmd --gro input.gro]"<<endl;
         return 1;
     }
-    char* inputFilename = arg_parser.get("-f");
-    char* vmdFilename = arg_parser.get("--vmd");
-    char* groFilename = arg_parser.get("--gro");
+    char* inputFilename = (char*) arg_parser.get("-f");
+    char* vmdFilename = (char*) arg_parser.get("--vmd");
+    char* groFilename = (char*) arg_parser.get("--gro");
     string clusterMode( arg_parser.get("--clustermode") );
     string residuePairMode( arg_parser.get("--residuepairmode") );
     string residueMode( arg_parser.get("--residuemode") );
@@ -111,7 +111,7 @@ int main(int argc, char* argv[]){
     }
   
 
-  if(arg_parser.exists( string("--vmd") ) ){
+  if( arg_parser.exists("--vmd") ){
     vmdFile.open(vmdFilename,ios::out);
   }
   
@@ -209,7 +209,7 @@ int main(int argc, char* argv[]){
   
 
 
-  if( arg_parser.exists( string("--vmd") ) ){
+  if( arg_parser.exists("--vmd") ){
     vmdFile<<"mol new "<<groFilename<<endl;
     vmdFile<<endl;
     vmdFile<<"mol delrep 0 top"<<endl;
