@@ -16,19 +16,17 @@
 #ifndef ARG_PARSER_H
 #define ARG_PARSER_H
 
-#include <string>
-#include <algorithm>
-#include <cstring>
+#include <vector>
 
 class Arg_Parser{
     public:
-        Arg_Parser(int argc, char *argv[]);
-        char *get(const std::string &option);
-        bool exists(const std::string &option);
-        char* get_ext(char* file_str);
-        char **begin;
-        char **end;
-        int argc;
-        char **argv;
+        std::vector<char*> args;
+    
+        Arg_Parser(int argc, char* argv[]);
+        bool compare(char const * cstr1, char const * cstr2);
+        bool exists(char const * option);
+        char const * get(char const * option);
+        char const * get_ext(char const * option);
+        bool check_ext(char const * option, char const * ext);
 };
 #endif

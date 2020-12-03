@@ -31,20 +31,20 @@ int main(int argc, char* argv[])
     
     Arg_Parser arg_parser(argc, argv);
     if(argc==9){ //conversion from Cartesians to BAT in double precision
-					if(!arg_parser.exists("-t")||!arg_parser.exists("-x")||!arg_parser.exists("-o")||!arg_parser.exists("--bb")){
-            cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat --bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
+					if(!arg_parser.exists("--bb")){
+                        cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat --bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
 						return 1;
 					}
         vector <std::string> backboneAtomNames;
 
         //check if command line arguments were supplied correctly, else put out help and quit
-        if(((strcmp(arg_parser.get_ext(arg_parser.get("-t")),"top"))||(strcmp(arg_parser.get_ext(arg_parser.get("-x")),"xtc"))||(strcmp(arg_parser.get_ext(arg_parser.get("-o")),"bat")))) {
+        if( ( !arg_parser.check_ext("-t","top") ) || ( !arg_parser.check_ext("-x","xtc") ) || ( !arg_parser.check_ext("-o","bat") )) {
             cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat --bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
             return 1;
         }
 
         //Read in the requested names of backbone atoms
-        char* ptr = strtok (arg_parser.get("--bb")," ");
+        char* ptr = strtok ((char*) arg_parser.get("--bb")," ");
         while (ptr != NULL)
         {
             backboneAtomNames.push_back(string(ptr));
@@ -53,7 +53,7 @@ int main(int argc, char* argv[])
 
 				//Read the topology file and build a table for the molecules bonds as well as a list of backbone atoms
         cout<<"Reading topology."<<endl;
-        Topology proteins(string(arg_parser.get("-t")).c_str(), backboneAtomNames);
+        Topology proteins(string(arg_parser.get("-t")).c_str(), backboneAtomNames); //------------------------
 
         //Build the BAT Topology using the molecules bonds (and the backbone atoms to make use of phase angles)
         cout<<"Building BAT topology."<<endl;
@@ -61,25 +61,25 @@ int main(int argc, char* argv[])
 
         //Use the list of dihedrals and the original trajectory file to build the BAT binary trajectory in double precision (masses are included in the .bat file since they might come in handy at a later point). Also add information about the atoms.
         cout<<"Writing .bat trajectory."<<endl;
-        BAT_Trajectory trj(string(arg_parser.get("-x")).c_str(),string(arg_parser.get("-o")).c_str(), &bat.dihedrals, &proteins.masses,&proteins.residues,&proteins.residueNumbers,&proteins.atomNames,&proteins.belongsToMolecule);
+        BAT_Trajectory trj(string(arg_parser.get("-x")).c_str(),string(arg_parser.get("-o")).c_str(), &bat.dihedrals, &proteins.masses,&proteins.residues,&proteins.residueNumbers,&proteins.atomNames,&proteins.belongsToMolecule); //-----------------
 		
 		}
     else if(argc==10) { //conversion from Cartesians to BAT in single precision
-					if(!arg_parser.exists("-t")||!arg_parser.exists("-x")||!arg_parser.exists("-o")||!arg_parser.exists("--bb")||!arg_parser.exists("--single_precision")){
-            cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat --bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
+					if( !arg_parser.exists("--bb") || !arg_parser.exists("--single_precision") ){
+                        cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat --bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
 						return 1;
 					}
                 
         vector <std::string> backboneAtomNames;
 
         //check if command line arguments were supplied correctly, else put out help and quit
-        if(((strcmp(arg_parser.get_ext(arg_parser.get("-t")),"top"))||(strcmp(arg_parser.get_ext(arg_parser.get("-x")),"xtc"))||(strcmp(arg_parser.get_ext(arg_parser.get("-o")),"bat")))) {
+        if( ( !arg_parser.check_ext("-t","top") ) || ( !arg_parser.check_ext("-x","xtc") ) || ( !arg_parser.check_ext("-o","bat") )) {
             cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat --bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
             return 1;
         }
 
         //Read in the requested names of backbone atoms
-        char* ptr = strtok (arg_parser.get("--bb")," ");
+        char* ptr = strtok ((char*) arg_parser.get("--bb")," ");
         while (ptr != NULL)
         {
             backboneAtomNames.push_back(string(ptr));
@@ -89,7 +89,7 @@ int main(int argc, char* argv[])
 
         //Read the topology file and build a table for the molecules bonds as well as a list of backbone atoms
         cout<<"Reading topology."<<endl;
-        Topology proteins(string(arg_parser.get("-t")).c_str(), backboneAtomNames);
+        Topology proteins(string(arg_parser.get("-t")).c_str(), backboneAtomNames); //-------------------
 
         //Build the BAT Topology using the molecules bonds (and the backbone atoms to make use of phase angles)
         cout<<"Building BAT topology."<<endl;
@@ -97,17 +97,13 @@ int main(int argc, char* argv[])
 
         //Use the list of dihedrals and the original trajectory file to build the BAT binary trajectory in single precision (masses are included in the .bat file since they might come in handy at a later point). Also add information about the atoms.
         cout<<"Writing .bat trajectory."<<endl;
-        BAT_Trajectory trj(string(arg_parser.get("-x")).c_str(),string(arg_parser.get("-o")).c_str(), &bat.dihedrals,&proteins.masses,&proteins.residues,&proteins.residueNumbers,&proteins.atomNames,&proteins.belongsToMolecule,0);
+        BAT_Trajectory trj(string(arg_parser.get("-x")).c_str(),string(arg_parser.get("-o")).c_str(), &bat.dihedrals,&proteins.masses,&proteins.residues,&proteins.residueNumbers,&proteins.atomNames,&proteins.belongsToMolecule,0); //-------------------
 
     }
     else  if (argc==5) { // conversion from BAT to Cartesians
-					if(!arg_parser.exists("-b")||!arg_parser.exists("-o")){
-            cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat --bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
-						return 1;
-					}
-
+        
         //check if command line arguments were supplied correctly, else put out help and quit
-        if(((strcmp(arg_parser.get_ext(arg_parser.get("-b")),"bat"))||(strcmp(arg_parser.get_ext(arg_parser.get("-o")),"xtc")))) {
+        if( ( !arg_parser.check_ext("-b","bat") ) || ( !arg_parser.check_ext("-o","xtc") ) ) {
             cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat --bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
             return 1;
         }
@@ -115,11 +111,11 @@ int main(int argc, char* argv[])
 
         //do the conversion
         cout<<"Converting .bat to .xtc."<<endl;
-        BAT_Trajectory trj(string(arg_parser.get("-b")).c_str(),string(arg_parser.get("-o")).c_str());
+        BAT_Trajectory trj(string(arg_parser.get("-b")).c_str(),string(arg_parser.get("-o")).c_str()); //------------------------
 
     }
     else {
-            cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat --bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
+        cerr<<"USAGE: "<<argv[0]<<" -t input.top -x input.xtc -o output.bat --bb \"BackboneAtomName1 BackboneAtomName2 BackboneAtomName3 ...\" [--single_precision]\nOR "<<argv[0]<<" -b input.bat -o output.xtc\n";
         return 1;
     }
 

@@ -20,41 +20,95 @@
 using namespace std;
 
 
-Arg_Parser::Arg_Parser(int argc, char *argv[]){
-    this->argc = argc;
-    this->argv = argv;
-    begin = argv;
-    end = argv + argc;
-
+Arg_Parser::Arg_Parser(int argc, char* argv[]){
+    for(int i = 0; i < argc; i++) args.push_back(argv[i]);
 }
 
-char *Arg_Parser::get(const string &option) {
-    char **itr = find(begin, end, option);
-    if (itr != end && ++itr != end) return *itr;
-    return 0;
-}
+bool Arg_Parser::compare(char const * cstr1, char const * cstr2){
 
-bool Arg_Parser::exists(const string &option) {
-  return find(begin, end, option) != end;
-}
+    int counter = 0;
+    if(cstr1[counter] != cstr2[counter]) return false;
 
-
-char* Arg_Parser::get_ext(char* file_str){
-    unsigned int counter = 0;
-    int last_pos = -1;
-
-    while(file_str[counter]!='\0'){
-        if(file_str[counter]=='.') last_pos = counter;
+    while( (cstr1[counter] != '\0') ){
+        if(cstr1[counter + 1] != cstr2[counter + 1]) return false;
         counter++;
     }
-    if (last_pos == -1){
-        My_Error my_error((string("ERROR: FILE ") +
-                       string(file_str) + string(" HAS NO EXTENSION! ABORTING."))
-                          .c_str());
+
+    return true;
+
+}
+
+bool Arg_Parser::exists(char const * option){
+    
+    unsigned int counter = 0;
+    for(unsigned int i = 0; i < args.size(); i++){
+        if( compare( option, args[i] ) ) counter++;
+    }
+    
+    if(counter > 1){
+        My_Error my_error( (string("ERROR: COMMAND LINE OPTION \"") +
+                       string(option) + string("\" SPECIFIED MULTIPLE TIMES! ABORTING.") )
+                          .c_str() );
         throw my_error;
     }
-    return file_str + last_pos + 1;
+
+    return counter;
 }
+
+char const * Arg_Parser::get(char const * option){
+    if(!exists(option)){
+        My_Error my_error( (string("ERROR: COMMAND LINE OPTION \"") +
+                       string(option) + string("\" NOT SPECIFIED! ABORTING.") )
+                          .c_str() );
+        throw my_error;
+    }
+    
+    unsigned int counter = 0;
+    for(unsigned int i = 0; i < args.size(); i++){
+        if( compare( (char*)option, args[i]) ) break;
+        counter++;
+    }
+    
+    if(counter > args.size() - 2){
+        My_Error my_error( (string("ERROR: NO VALUE SPECIFIED FOR COMMAND LINE OPTION \"") +
+                       string(option) + string("\"! ABORTING.") )
+                          .c_str() );
+        throw my_error;
+    }
+    
+
+return args[counter+1];
+}
+
+char const * Arg_Parser::get_ext(char const * option){
+    char const * value = get(option);
+    char const * ext;
+
+    unsigned int counter = 0;
+    unsigned int dot_counter = 0;
+    while ( value[counter] != '\0'){
+        if(value[counter] == '.') {
+            ext = value + counter + 1;
+            dot_counter++;
+        }
+        counter++;
+    }
+    
+    if( (dot_counter == 0) || ext[0] == '\0' ){
+        My_Error my_error( (string("ERROR: FILE SPECIFIED FOR COMMAND LINE OPTION \"") +
+                string(option) + string("\" (\"") + string(value) + string("\") DOES NOT HAVE AN EXTENSION! ABORTING.") )
+                .c_str() );
+        throw my_error;
+    }
+    
+    return ext;
+}
+
+bool Arg_Parser::check_ext(char const * option, char const * target_ext){
+    char const * ext = get_ext(option);
+    return compare(ext, target_ext);
+}
+
 
 
 
