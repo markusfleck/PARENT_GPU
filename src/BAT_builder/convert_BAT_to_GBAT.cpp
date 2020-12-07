@@ -130,8 +130,12 @@ int main(int argc, char *argv[]) {
             type_addr[TYPE_A] = (double*) mem + n_frames * type_n_dofs[TYPE_B];
             type_addr[TYPE_D] = (double*) mem + n_frames * (type_n_dofs[TYPE_B] + type_n_dofs[TYPE_A]);
             
+            cout<<"DEBUG: Loading dofs."<<endl;
             bat.load_dofs(type_addr, type_id_start, type_id_end);
+            cout<<"DEBUG: dofs loaded."<<endl;
+            cout<<"DEBUG: memory allocated: "<<cpu_ram_available<<" memory needed: "<< dofs_loaded * n_frames * sizeof(double) << " works: "<<(cpu_ram_available>=dofs_loaded * n_frames * sizeof(double))<<endl;
             outfile->write(mem, dofs_loaded * n_frames * sizeof(double));
+            cout<<"DEBUG: dofs written."<<endl;
           }
           
           dof_id_start_g += n_dofs_load;
