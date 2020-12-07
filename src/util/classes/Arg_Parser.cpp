@@ -82,7 +82,7 @@ return args[counter+1];
 
 char const * Arg_Parser::get_ext(char const * option){
     char const * value = get(option);
-    char const * ext;
+    char const * ext = "\0";
 
     unsigned int counter = 0;
     unsigned int dot_counter = 0;
