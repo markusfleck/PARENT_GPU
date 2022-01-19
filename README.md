@@ -142,6 +142,8 @@ Continue with (you can try to speed up the compilation by using multiple cores: 
     make check
     make install
 
+If you have problems downloading the regression tests, go with -DREGRESSIONTEST_DOWNLOAD=OFF and skip "make check".
+
 Last but not least, you need to set environment variables. On Ubuntu/Linux Mint/Debian and relatives, this is done by:
 
     export CPLUS_INCLUDE_PATH=~/programs/gromacs-2018.8/include:$CPLUS_INCLUDE_PATH
