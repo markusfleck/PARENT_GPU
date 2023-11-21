@@ -29,34 +29,34 @@
 #endif
 
 
-__global__ void histo2D(PRECISION* __restrict__ traj1, PRECISION* __restrict__ traj2, const int numFrames,
-                        unsigned int* __restrict__ histo, const int n_bins,
+__global__ void histo2D(PRECISION* __restrict__ traj1, PRECISION* __restrict__ traj2, const size_t numFrames,
+                        unsigned int* __restrict__ histo, const size_t n_bins,
                         PRECISION binSize1, PRECISION binSize2, PRECISION min1,
                         PRECISION min2) {
 
-  int idx = threadIdx.x + blockIdx.x * blockDim.x;
-  int offset = blockDim.x * gridDim.x;
+  size_t idx = threadIdx.x + blockIdx.x * blockDim.x;
+  size_t offset = blockDim.x * gridDim.x;
     
   while (idx < numFrames) {
-    atomicAdd(&histo[int((traj1[idx] - min1) / binSize1) * n_bins +
-                     int((traj2[idx] - min2) / binSize2)],
+    atomicAdd(&histo[size_t((traj1[idx] - min1) / binSize1) * n_bins +
+                     size_t((traj2[idx] - min2) / binSize2)],
               1);
     idx += offset;
   }
 }
 
 
-__global__ void histo2D_shared_block(PRECISION* __restrict__ traj1, PRECISION* __restrict__ traj2, const int numFrames,
-                        unsigned int* __restrict__ histo, const int n_bins,
+__global__ void histo2D_shared_block(PRECISION* __restrict__ traj1, PRECISION* __restrict__ traj2, const size_t numFrames,
+                        unsigned int* __restrict__ histo, const size_t n_bins,
                         PRECISION binSize1, PRECISION binSize2, PRECISION min1,
                         PRECISION min2) {
                         
     extern __shared__ unsigned int histo_block[];
 
-  int idx = threadIdx.x + blockIdx.x * blockDim.x;
-  int offset = blockDim.x * gridDim.x;
-    int tid = threadIdx.x;
-    int n_bins_total = n_bins * n_bins;
+  size_t idx = threadIdx.x + blockIdx.x * blockDim.x;
+  size_t offset = blockDim.x * gridDim.x;
+    size_t tid = threadIdx.x;
+    size_t n_bins_total = n_bins * n_bins;
                         
     while(tid < n_bins_total){
         histo_block[tid] = 0;
@@ -67,10 +67,10 @@ __global__ void histo2D_shared_block(PRECISION* __restrict__ traj1, PRECISION* _
     PRECISION4 traj_tmp1 = reinterpret_cast<PRECISION4*>(traj1)[idx];
     PRECISION4 traj_tmp2 = reinterpret_cast<PRECISION4*>(traj2)[idx];
     
-    atomicAdd(&histo_block[int((traj_tmp1.x - min1) / binSize1) * n_bins + int((traj_tmp2.x - min2) / binSize2)], 1);
-    atomicAdd(&histo_block[int((traj_tmp1.y - min1) / binSize1) * n_bins + int((traj_tmp2.y - min2) / binSize2)], 1);
-    atomicAdd(&histo_block[int((traj_tmp1.z - min1) / binSize1) * n_bins + int((traj_tmp2.z - min2) / binSize2)], 1);
-    atomicAdd(&histo_block[int((traj_tmp1.w - min1) / binSize1) * n_bins + int((traj_tmp2.w - min2) / binSize2)], 1);
+    atomicAdd(&histo_block[size_t((traj_tmp1.x - min1) / binSize1) * n_bins + size_t((traj_tmp2.x - min2) / binSize2)], 1);
+    atomicAdd(&histo_block[size_t((traj_tmp1.y - min1) / binSize1) * n_bins + size_t((traj_tmp2.y - min2) / binSize2)], 1);
+    atomicAdd(&histo_block[size_t((traj_tmp1.z - min1) / binSize1) * n_bins + size_t((traj_tmp2.z - min2) / binSize2)], 1);
+    atomicAdd(&histo_block[size_t((traj_tmp1.w - min1) / binSize1) * n_bins + size_t((traj_tmp2.w - min2) / binSize2)], 1);
     
     idx += offset;
   }
@@ -78,7 +78,7 @@ __global__ void histo2D_shared_block(PRECISION* __restrict__ traj1, PRECISION* _
   
   int leftover = numFrames - 4 *idx;
   while(leftover > 0){
-    atomicAdd(&histo_block[int((traj1[numFrames - leftover] - min1) / binSize1) * n_bins + int((traj2[numFrames - leftover] - min2) / binSize2)], 1);
+    atomicAdd(&histo_block[size_t((traj1[numFrames - leftover] - min1) / binSize1) * n_bins + size_t((traj2[numFrames - leftover] - min2) / binSize2)], 1);
     leftover--;
   }
   
@@ -95,13 +95,13 @@ __global__ void histo2D_shared_block(PRECISION* __restrict__ traj1, PRECISION* _
 
 
 
-__global__ void cu_baEnt(unsigned int *histo, const int numFrames,
-                         const int bins1, const int bins2, PRECISION binSize1,
+__global__ void cu_baEnt(unsigned int *histo, const size_t numFrames,
+                         const size_t bins1, const size_t bins2, PRECISION binSize1,
                          PRECISION binSize2, PRECISION min1, PRECISION min2,
                          PRECISION *plnpsum, unsigned int *occupbins) {
 
-  int idx = threadIdx.x + blockIdx.x * blockDim.x;
-  int offset = blockDim.x * gridDim.x;
+  size_t idx = threadIdx.x + blockIdx.x * blockDim.x;
+  size_t offset = blockDim.x * gridDim.x;
   while (idx < bins1 * bins2) {
     PRECISION blen = min1 + binSize1 / 2.0 + binSize1 * (idx / bins2);
     PRECISION theta = min2 + binSize2 / 2.0 + binSize2 * (idx % bins2);
@@ -116,13 +116,13 @@ __global__ void cu_baEnt(unsigned int *histo, const int numFrames,
   }
 }
 
-__global__ void cu_bdEnt(unsigned int *histo, const int numFrames,
-                         const int bins1, const int bins2, PRECISION binSize1,
+__global__ void cu_bdEnt(unsigned int *histo, const size_t numFrames,
+                         const size_t bins1, const size_t bins2, PRECISION binSize1,
                          PRECISION binSize2, PRECISION min1, PRECISION *plnpsum,
                          unsigned int *occupbins) {
 
-  int idx = threadIdx.x + blockIdx.x * blockDim.x;
-  int offset = blockDim.x * gridDim.x;
+  size_t idx = threadIdx.x + blockIdx.x * blockDim.x;
+  size_t offset = blockDim.x * gridDim.x;
   while (idx < bins1 * bins2) {
     PRECISION blen = min1 + binSize1 / 2.0 + binSize1 * (idx / bins2);
     PRECISION probDens =
@@ -136,13 +136,13 @@ __global__ void cu_bdEnt(unsigned int *histo, const int numFrames,
   }
 }
 
-__global__ void cu_adEnt(unsigned int *histo, const int numFrames,
-                         const int bins1, const int bins2, PRECISION binSize1,
+__global__ void cu_adEnt(unsigned int *histo, const size_t numFrames,
+                         const size_t bins1, const size_t bins2, PRECISION binSize1,
                          PRECISION binSize2, PRECISION min1, PRECISION *plnpsum,
                          unsigned int *occupbins) {
 
-  int idx = threadIdx.x + blockIdx.x * blockDim.x;
-  int offset = blockDim.x * gridDim.x;
+  size_t idx = threadIdx.x + blockIdx.x * blockDim.x;
+  size_t offset = blockDim.x * gridDim.x;
   while (idx < bins1 * bins2) {
     PRECISION theta = min1 + binSize1 / 2.0 + binSize1 * (idx / bins2);
     PRECISION probDens =
@@ -156,13 +156,13 @@ __global__ void cu_adEnt(unsigned int *histo, const int numFrames,
   }
 }
 
-__global__ void cu_bbEnt(unsigned int *histo, const int numFrames,
-                         const int bins, PRECISION binSize1, PRECISION binSize2,
+__global__ void cu_bbEnt(unsigned int *histo, const size_t numFrames,
+                         const size_t bins, PRECISION binSize1, PRECISION binSize2,
                          PRECISION min1, PRECISION min2, PRECISION *plnpsum,
                          unsigned int *occupbins) {
 
-  int idx = threadIdx.x + blockIdx.x * blockDim.x;
-  int offset = blockDim.x * gridDim.x;
+  size_t idx = threadIdx.x + blockIdx.x * blockDim.x;
+  size_t offset = blockDim.x * gridDim.x;
   while (idx < bins * bins) {
     PRECISION blen1 = min1 + binSize1 / 2.0 + binSize1 * (idx / bins);
     PRECISION blen2 = min2 + binSize2 / 2.0 + binSize2 * (idx % bins);
@@ -177,13 +177,13 @@ __global__ void cu_bbEnt(unsigned int *histo, const int numFrames,
   }
 }
 
-__global__ void cu_aaEnt(unsigned int *histo, const int numFrames,
-                         const int bins, PRECISION binSize1, PRECISION binSize2,
+__global__ void cu_aaEnt(unsigned int *histo, const size_t numFrames,
+                         const size_t bins, PRECISION binSize1, PRECISION binSize2,
                          PRECISION min1, PRECISION min2, PRECISION *plnpsum,
                          unsigned int *occupbins) {
 
-  int idx = threadIdx.x + blockIdx.x * blockDim.x;
-  int offset = blockDim.x * gridDim.x;
+  size_t idx = threadIdx.x + blockIdx.x * blockDim.x;
+  size_t offset = blockDim.x * gridDim.x;
   while (idx < bins * bins) {
     PRECISION theta1 = min1 + binSize1 / 2.0 + binSize1 * (idx / bins);
     PRECISION theta2 = min2 + binSize2 / 2.0 + binSize2 * (idx % bins);
@@ -198,12 +198,12 @@ __global__ void cu_aaEnt(unsigned int *histo, const int numFrames,
   }
 }
 
-__global__ void cu_ddEnt(unsigned int *histo, const int numFrames,
-                         const int bins, PRECISION binSize1, PRECISION binSize2,
+__global__ void cu_ddEnt(unsigned int *histo, const size_t numFrames,
+                         const size_t bins, PRECISION binSize1, PRECISION binSize2,
                          PRECISION *plnpsum, unsigned int *occupbins) {
 
-  int idx = threadIdx.x + blockIdx.x * blockDim.x;
-  int offset = blockDim.x * gridDim.x;
+  size_t idx = threadIdx.x + blockIdx.x * blockDim.x;
+  size_t offset = blockDim.x * gridDim.x;
   while (idx < bins * bins) {
     PRECISION probDens = histo[idx] / (numFrames * binSize1 * binSize2);
     if (probDens > 0) {

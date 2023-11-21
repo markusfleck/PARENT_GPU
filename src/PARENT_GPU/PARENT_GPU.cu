@@ -63,16 +63,16 @@ The order is bonds before angles, angles before dihedrals.
 class GPU_RAM_Block {
 public:
   unsigned char type; // the type of the degrees of freedom the block contains, i. e. either bonds(0), angles(1) or dihedrals(2)
-  unsigned int dof_id_start_g; // the global id of the first dof in the block
-  unsigned int dof_id_end_g; // the global id of the last dof in the block (inclusive)
-  unsigned int n_dofs; // the total number of dofs in the block
+  size_t dof_id_start_g; // the global id of the first dof in the block
+  size_t dof_id_end_g; // the global id of the last dof in the block (inclusive)
+  size_t n_dofs; // the total number of dofs in the block
   size_t n_bytes; // the amount of data the block occupies in bytes
   PRECISION *cpu_ram_start; // a pointer to the data on the CPU (set upon object instantiation). Trajectories are stored contigeously for each dof
   PRECISION *gpu_ram_start; // a pointer to the data on the GPU (set only upon calling the deploy function). Trajectories are stored contigeously for each dof
 
-  GPU_RAM_Block(PRECISION *cpu_ram_start, unsigned int dof_id_start_g,
-                unsigned int dof_id_end_g, unsigned int n_frames,
-                unsigned int n_dihedrals) {
+  GPU_RAM_Block(PRECISION *cpu_ram_start, size_t dof_id_start_g,
+                size_t dof_id_end_g, size_t n_frames,
+                size_t n_dihedrals) {
     // initialize the variables
     this->cpu_ram_start = cpu_ram_start;
     this->type = get_dof_type_from_id(dof_id_start_g, n_dihedrals);
@@ -94,23 +94,23 @@ public:
 // this class represents a chunk of degrees of freedom (dofs) which can be deployed to a CPU RAM bank. Extrema as well as 1D entropies are calculated upon deployement.
 class CPU_RAM_Block {
 public:
-  unsigned int dof_id_start_g; // the global id of the first dof in the block
-  unsigned int dof_id_end_g; // the global id of the last dof in the block (inclusive)
-  unsigned int n_dofs; // the total number of dofs in the block
+  size_t dof_id_start_g; // the global id of the first dof in the block
+  size_t dof_id_end_g; // the global id of the last dof in the block (inclusive)
+  size_t n_dofs; // the total number of dofs in the block
   int type_id_start_g[3] = {-1, -1, -1}; // the global ids of the first dof in the block for each dof type (i. e. bond, angle, dihedral)
   int type_id_end_g[3] = {-1, -1, -1}; // the global ids of the last dof (inclusive) in the block for each dof type (i. e. bond, angle, dihedral)
-  unsigned int type_n_dofs[3] = {0, 0, 0}; // the number of dofs in the block for each type
-  unsigned int gpu_ram_blocks_per_type[3]; // the number of GPU_RAM_Blocks needed for each dof type
-  unsigned int n_dihedrals; // the number of total number of dihedrals in the molecule. From this number, the number of bonds(==n_dihedrals + 2), angles(==n_dihedrals + 1) and atoms(==n_dihedrals + 3) can be calculated  
-  unsigned int gpu_dofs_per_block; // the number of dofs which fits in a GPU_RAM_Block
-  unsigned int n_frames; // the number of frames of the trajectory 
-  unsigned int n_frames_padded; // the padded number of frames. The padding is done to a multiple of 4 and used in the histo2D_shared_block kernel for efficient data loading
+  size_t type_n_dofs[3] = {0, 0, 0}; // the number of dofs in the block for each type
+  size_t gpu_ram_blocks_per_type[3]; // the number of GPU_RAM_Blocks needed for each dof type
+  size_t n_dihedrals; // the number of total number of dihedrals in the molecule. From this number, the number of bonds(==n_dihedrals + 2), angles(==n_dihedrals + 1) and atoms(==n_dihedrals + 3) can be calculated  
+  size_t gpu_dofs_per_block; // the number of dofs which fits in a GPU_RAM_Block
+  size_t n_frames; // the number of frames of the trajectory 
+  size_t n_frames_padded; // the padded number of frames. The padding is done to a multiple of 4 and used in the histo2D_shared_block kernel for efficient data loading
   vector<GPU_RAM_Block> blocks; // the GPU_RAM_Blocks associated to this CPU_RAM_Block
   PRECISION *block_start; // the location of the trajectories. Trajectories are stored contigeously for each dof
   PRECISION *minima; // the location of the minima for each dof
   PRECISION *maxima; // the location of the maxima for each dof
   bool extrema_calculated = false; // a flag indicating if minima, maxima and 1D entropy values have already been calculated
-  unsigned int n_bins; // the number of bins used for building the histograms
+  size_t n_bins; // the number of bins used for building the histograms
   PRECISION *result_entropy1D; // the location to store the 1D entropy results
   PRECISION *type_addr[3]; // the start of the trajectories for each dof type 
   PRECISION *bonds; // == type_addr[0]
@@ -118,9 +118,9 @@ public:
   PRECISION *dihedrals; // == type_addr[2]
   Bat *bat; // the BAT trajectory class to load the data from hard disk
 
-  CPU_RAM_Block(unsigned int dof_id_start_g, unsigned int dof_id_end_g,
-                unsigned int gpu_dofs_per_block, Bat *bat, PRECISION *minima,
-                PRECISION *maxima, unsigned int n_bins,
+  CPU_RAM_Block(size_t dof_id_start_g, size_t dof_id_end_g,
+                size_t gpu_dofs_per_block, Bat *bat, PRECISION *minima,
+                PRECISION *maxima, size_t n_bins,
                 PRECISION *result_entropy1D) {
 
     // initilize the variables            
@@ -181,10 +181,10 @@ public:
     blocks.clear(); // clear the GPU_RAM_Blocks to reinitialize them
     for (unsigned char type = get_dof_type_from_id(dof_id_start_g, n_dihedrals); // for all dof types in the CPU_RAM_Block
          type <= get_dof_type_from_id(dof_id_end_g, n_dihedrals); type++) {
-      for (unsigned int i = 0; i < gpu_ram_blocks_per_type[type]; i++) { // and for all GPU_RAM_Blocks of this type
-        unsigned int gpu_block_id_start_g =
+      for (size_t i = 0; i < gpu_ram_blocks_per_type[type]; i++) { // and for all GPU_RAM_Blocks of this type
+        size_t gpu_block_id_start_g =
             type_id_start_g[type] + i * gpu_dofs_per_block; // calculate the id of the first dof in the GPU_RAM_Block to be created
-        unsigned int gpu_block_id_end_g =
+        size_t gpu_block_id_end_g =
             type_id_start_g[type] + (i + 1) * gpu_dofs_per_block - 1; // calculate the id of the last dof in the GPU_RAM_Block to be created
         if (int(gpu_block_id_end_g) > type_id_end_g[type])
           gpu_block_id_end_g = type_id_end_g[type]; // if gpu_block_id_end_g refers to a different dof type than gpu_block_id_start_g, set gpu_block_id_end_g to the last id of the current dof type 
@@ -213,7 +213,7 @@ public:
       long long int histo[MODFITNBINS];
 
 #pragma omp for
-      for (unsigned int j = 0; j < type_n_dofs[TYPE_D]; j++) { // for all dihedrals
+      for (size_t j = 0; j < type_n_dofs[TYPE_D]; j++) { // for all dihedrals
         // first build a histogram of the dihedral values over the trajectory
         for (int k = 0; k < MODFITNBINS; k++)
           histo[k] = 0;
@@ -221,7 +221,7 @@ public:
         binsize = (2 * pi +
                    5e-9 * (sizeof(PRECISION) == sizeof(float) ? 100000 : 1)) /
                   MODFITNBINS; // divide 2 pi into MODFITNBINS bins, making sure that we cover a little more than 2 pi (depending on the precision used for the calculations) 
-        for (unsigned int i = 0; i < n_frames; i++) // bin the dihedrals
+        for (size_t i = 0; i < n_frames; i++) // bin the dihedrals
           histo[int((dihedrals[j * n_frames_padded + i]) / binsize)] += 1;
 
         zeroExists = false;
@@ -269,7 +269,7 @@ public:
         modFit = 2 * pi - (longestZeroStretchPos + 0.5) *
                               binsize; // calculate the shift to put the zero
                                        // stretch to the 2pi end
-        for (unsigned int k = 0; k < n_frames; k++) {
+        for (size_t k = 0; k < n_frames; k++) {
           dihedrals[j * n_frames_padded + k] =
               dihedrals[j * n_frames_padded + k] + modFit -
               2 * pi *
@@ -287,10 +287,10 @@ public:
       PRECISION tmpMin, tmpMax;
 
 #pragma omp for
-      for (unsigned int j = 0; j < n_dofs; j++) { // for all dofs
+      for (size_t j = 0; j < n_dofs; j++) { // for all dofs
         tmpMax = block_start[j * n_frames_padded]; // set the temporary minimum/maximum to the coordinate value of the first frame
         tmpMin = block_start[j * n_frames_padded];
-        for (unsigned int i = 1; i < n_frames; i++) { // the for all frames
+        for (size_t i = 1; i < n_frames; i++) { // the for all frames
           if (block_start[j * n_frames_padded + i] > tmpMax) { // set the temporary maximum/minimum the a new value if the coordinates value is larger/smaller in the current frame  
             tmpMax = block_start[j * n_frames_padded + i];
           }
@@ -327,14 +327,14 @@ public:
       long long int histo[n_bins];
       int occupbins;
 #pragma omp for
-      for (unsigned int j = dof_id_start_g; j <= dof_id_end_g;
+      for (size_t j = dof_id_start_g; j <= dof_id_end_g;
            j++) { // for all dofs (using omp threads)
-        for (unsigned int k = 0; k < n_bins; k++) {
+        for (size_t k = 0; k < n_bins; k++) {
           histo[k] = 0; // initialize a histogram with zeros
         }
         binsize = (maxima[j] - minima[j]) /
                   n_bins; // calculate the size of the bins
-        for (unsigned int i = 0; i < n_frames;
+        for (size_t i = 0; i < n_frames;
              i++) { // and fill the histogram using all frames of the trajectory
           histo[int(
               (block_start[(j - dof_id_start_g) * n_frames_padded + i] - minima[j]) /
@@ -345,7 +345,7 @@ public:
         plnpsum = 0;
         binval = minima[j] + (binsize / 2.0);
         Jac = 1;
-        for (unsigned int k = 0; k < n_bins; k++) {
+        for (size_t k = 0; k < n_bins; k++) {
           switch (get_dof_type_from_id(j, n_dihedrals)) {
           case TYPE_B:
             Jac = binval * binval;
@@ -378,16 +378,16 @@ class GPU_RAM_Layout {
 public:
   char *gpu_ram_start; // the address of the data on the GPU
   size_t gpu_n_bytes; // the size of the data on the GPU
-  unsigned int dofs_per_block; // how many dofs fit into one ram bank, considering the additional storage for the (temporary) results
+  size_t dofs_per_block; // how many dofs fit into one ram bank, considering the additional storage for the (temporary) results
   PRECISION *dof_block_1; // the address of the first ram bank
   PRECISION *dof_block_2; // the address of the second ram bank
   PRECISION *result; // the address of the 2D entropy entropy results
   unsigned int *occupied_bins; // the address of the result which stores the number of occupied bins in the histograms for Herzel entropy unbiasing
   unsigned int *histograms; // the address of the histograms to be build
-    unsigned int n_bins;
+    size_t n_bins;
 
-  GPU_RAM_Layout(unsigned int n_frames, unsigned int n_bins,
-                 size_t gpu_n_bytes, unsigned int n_dofs_total) {
+  GPU_RAM_Layout(size_t n_frames, size_t n_bins,
+                 size_t gpu_n_bytes, size_t n_dofs_total) {
                  
     this -> n_bins = n_bins; // store the number of bins 
                  
@@ -396,7 +396,7 @@ public:
     double a = 2 * n_frames * sizeof(PRECISION);
     double b = sizeof(PRECISION) + sizeof(unsigned int) * (n_bins * n_bins + 1);
     dofs_per_block =
-        (unsigned int)((-a / 2 + sqrt(a * a / 4 + gpu_n_bytes * b)) / b);
+        (size_t)((-a / 2 + sqrt(a * a / 4 + gpu_n_bytes * b)) / b);
                  
     
                  
@@ -417,7 +417,7 @@ public:
     dof_block_2 = dof_block_1 + static_cast<size_t>(dofs_per_block) * n_frames; // set the starting address for GPU RAM bank 1
     histograms = (unsigned int *) (dof_block_2 + static_cast<size_t>(dofs_per_block) * n_frames); // set the starting address for the histograms to be build
     result = (PRECISION*) (histograms + static_cast<size_t>(dofs_per_block) * dofs_per_block * n_bins * n_bins); // set the starting address for the 2D entropy results
-    occupied_bins = (unsigned int*) (result + static_cast<size_t>(dofs_per_block) * dofs_per_block); // set the starting address for the occupied bins result
+    occupied_bins = (unsigned int *) (result + static_cast<size_t>(dofs_per_block) * dofs_per_block); // set the starting address for the occupied bins result
   }
 };
 
@@ -427,7 +427,7 @@ class CPU_RAM_Layout {
 public:
   char *cpu_ram_start; // The address of the whole data block
   size_t cpu_n_bytes; // The number of bytes to use
-  unsigned int dofs_per_block; // The number of dofs which each of the two blocks holds
+  size_t dofs_per_block; // The number of dofs which each of the two blocks holds
   PRECISION *dof_block_1; // The address of the first dof block (==cpu_ram_start)
   PRECISION *dof_block_2; // The address of the second dof block
   PRECISION *result_entropy; // The address of the entropy results
@@ -447,14 +447,14 @@ public:
   PRECISION *maxima; // The address of the maxima
   PRECISION *tmp_result_entropy; // The address for copying the entropy results from GPU to CPU RAM
   unsigned int *tmp_result_occupied_bins; // The address for copying the occupied_bins results from GPU to CPU RAM
-  unsigned int n_frames; // the number of frames in the trajectory
-  unsigned int n_dihedrals; // the number of dihedrals in the molecule(s)
+  size_t n_frames; // the number of frames in the trajectory
+  size_t n_dihedrals; // the number of dihedrals in the molecule(s)
 
-  CPU_RAM_Layout(unsigned int n_frames, size_t cpu_n_bytes, unsigned int gpu_dofs_per_block,
-                 unsigned int n_dihedrals) {
-    unsigned int n_dofs_total = 3 * (n_dihedrals + 1); // == n_bonds + n_angles + n_dihedrals
-    unsigned int n_bonds = n_dihedrals + 2;
-    unsigned int n_angles = n_dihedrals + 1;
+  CPU_RAM_Layout(size_t n_frames, size_t cpu_n_bytes, size_t gpu_dofs_per_block,
+                 size_t n_dihedrals) {
+    size_t n_dofs_total = 3 * (n_dihedrals + 1); // == n_bonds + n_angles + n_dihedrals
+    size_t n_bonds = n_dihedrals + 2;
+    size_t n_angles = n_dihedrals + 1;
     this->n_frames = n_frames;
     this->n_dihedrals = n_dihedrals;
     
@@ -534,12 +534,12 @@ class GPU {
         GPU_RAM_Layout* layout;
         int state[2];
         cudaStream_t streams[N_STREAMS]; // an array of CUDA streams
-    GPU(int id, struct cudaDeviceProp property, unsigned int n_frames_padded, unsigned int n_bins, size_t n_bytes, unsigned int n_dofs_total, bool init_ram = false){
+    GPU(int id, struct cudaDeviceProp property, size_t n_frames_padded, size_t n_bins, size_t n_bytes, size_t n_dofs_total, bool init_ram = false){
         this->id = id;
         this->property = property;
         gpuErrchk(cudaSetDevice(id));
         if(init_ram) layout = new GPU_RAM_Layout(n_frames_padded, n_bins, n_bytes, n_dofs_total); // create the RAM layout on the GPU 
-        for (unsigned int i = 0; i < N_STREAMS; i++) { // create CUDA streams TODO: replace N_STREAMS with a check on the GPU properties and set the number accordingly
+        for (size_t i = 0; i < N_STREAMS; i++) { // create CUDA streams TODO: replace N_STREAMS with a check on the GPU properties and set the number accordingly
             gpuErrchk( cudaStreamCreate(streams + i) );
         }
         gpuErrchk( cudaPeekAtLastError() );
@@ -551,17 +551,17 @@ class Work{
     public:
     static vector< vector<int> > my_work;
     static Spin_Lock spin_lock;
-    unsigned int n_frames, n_frames_padded;
+    size_t n_frames, n_frames_padded;
     Entropy_Matrix* ent_mat;
     CPU_RAM_Layout* cpu_ram_layout;
         Work(){};
-        Work(unsigned int n_frames, unsigned int n_frames_padded, Entropy_Matrix* ent_mat, CPU_RAM_Layout* cpu_ram_layout){
+        Work(size_t n_frames, size_t n_frames_padded, Entropy_Matrix* ent_mat, CPU_RAM_Layout* cpu_ram_layout){
             this -> n_frames = n_frames;
             this -> n_frames_padded = n_frames_padded;
             this -> ent_mat = ent_mat;
             this -> cpu_ram_layout = cpu_ram_layout;
         }
-        void init(unsigned int n_frames, unsigned int n_frames_padded, Entropy_Matrix* ent_mat, CPU_RAM_Layout* cpu_ram_layout){
+        void init(size_t n_frames, size_t n_frames_padded, Entropy_Matrix* ent_mat, CPU_RAM_Layout* cpu_ram_layout){
             this -> n_frames = n_frames;
             this -> n_frames_padded = n_frames_padded;
             this -> ent_mat = ent_mat;
@@ -570,7 +570,7 @@ class Work{
         
         void add_work(vector< vector<int> > work){
             spin_lock.lock();
-                for(unsigned int i = 0; i < work.size(); i++) my_work.push_back(work[i]);
+                for(size_t i = 0; i < work.size(); i++) my_work.push_back(work[i]);
             spin_lock.unlock();
         }
         
@@ -589,7 +589,7 @@ class Work{
         void operator() (GPU* gpu, vector<GPU_RAM_Block>* blocks1, vector<GPU_RAM_Block>* blocks2){
             vector< vector<int> > work;
             while( get_work(gpu->state, &work) ){
-                for(unsigned int i = 0; i < work.size(); i++){ // TODO: use gpu_state for cleverer data fetching
+                for(size_t i = 0; i < work.size(); i++){ // TODO: use gpu_state for cleverer data fetching
                     if(work[i].size() == 1){
                         GPU_RAM_Block tmp_block = (*blocks1)[work[i][0]]; // copy the block for thread safety //TODO: WARNING: Check if this works correctly
                         deploy(&tmp_block, gpu->id, gpu->layout->dof_block_1); // TODO: use gpu_state for cleverer data fetching
@@ -638,8 +638,8 @@ class Work{
         for (size_t i = 0; i < block1->n_dofs; i++) {
           for (size_t j = 0; j < block2->n_dofs; j++) {
             
-            unsigned int dof1_g = i + block1->dof_id_start_g;
-            unsigned int dof2_g = j + block2->dof_id_start_g;
+            size_t dof1_g = i + block1->dof_id_start_g;
+            size_t dof2_g = j + block2->dof_id_start_g;
             PRECISION min1 = cpu_ram_layout->minima[dof1_g];
             PRECISION min2 = cpu_ram_layout->minima[dof2_g];
 
@@ -666,8 +666,8 @@ class Work{
 
         for (size_t i = 0; i < block1->n_dofs; i++) {
           for (size_t j = 0; j < block2->n_dofs; j++) {
-            unsigned int dof1_g = i + block1->dof_id_start_g;
-            unsigned int dof2_g = j + block2->dof_id_start_g;
+            size_t dof1_g = i + block1->dof_id_start_g;
+            size_t dof2_g = j + block2->dof_id_start_g;
             PRECISION min1 = cpu_ram_layout->minima[dof1_g];
             PRECISION min2 = cpu_ram_layout->minima[dof2_g];
 
@@ -733,11 +733,11 @@ class Work{
                                  cudaMemcpyDeviceToHost));
         
 
-        for (unsigned int i = 0; i < block1->n_dofs; i++) {
-          for (unsigned int j = 0; j < block2->n_dofs; j++) {
-            unsigned int dof1_gt = i + block1->dof_id_start_g -
+        for (size_t i = 0; i < block1->n_dofs; i++) {
+          for (size_t j = 0; j < block2->n_dofs; j++) {
+            size_t dof1_gt = i + block1->dof_id_start_g -
                                 get_min_id_for_type(block1->type, cpu_ram_layout->n_dihedrals);
-            unsigned int dof2_gt = j + block2->dof_id_start_g -
+            size_t dof2_gt = j + block2->dof_id_start_g -
                                 get_min_id_for_type(block2->type, cpu_ram_layout->n_dihedrals);
             double entropy =
                 -cpu_ram_layout->tmp_result_entropy[i * block2->n_dofs + j] +
@@ -767,8 +767,8 @@ class Work{
 
         for (size_t i = 0; i < block->n_dofs - 1; i++) {
           for (size_t j = i + 1; j < block->n_dofs; j++) {
-            unsigned int dof1_g = i + block->dof_id_start_g;
-            unsigned int dof2_g = j + block->dof_id_start_g;
+            size_t dof1_g = i + block->dof_id_start_g;
+            size_t dof2_g = j + block->dof_id_start_g;
             PRECISION min1 = cpu_ram_layout->minima[dof1_g];
             PRECISION min2 = cpu_ram_layout->minima[dof2_g];
 
@@ -795,8 +795,8 @@ class Work{
 
         for (size_t i = 0; i < block->n_dofs - 1; i++) {
           for (size_t j = i + 1; j < block->n_dofs; j++) {
-            unsigned int dof1_g = i + block->dof_id_start_g;
-            unsigned int dof2_g = j + block->dof_id_start_g;
+            size_t dof1_g = i + block->dof_id_start_g;
+            size_t dof2_g = j + block->dof_id_start_g;
             PRECISION min1 = cpu_ram_layout->minima[dof1_g];
             PRECISION min2 = cpu_ram_layout->minima[dof2_g];
 
@@ -864,11 +864,11 @@ class Work{
                                  cudaMemcpyDeviceToHost));
         
 
-        for (unsigned int i = 0; i < block->n_dofs - 1; i++) {
-          for (unsigned int j = i + 1; j < block->n_dofs; j++) {
-            unsigned int dof1_gt = i + block->dof_id_start_g -
+        for (size_t i = 0; i < block->n_dofs - 1; i++) {
+          for (size_t j = i + 1; j < block->n_dofs; j++) {
+            size_t dof1_gt = i + block->dof_id_start_g -
                                 get_min_id_for_type(block->type, cpu_ram_layout->n_dihedrals);
-            unsigned int dof2_gt = j + block->dof_id_start_g -
+            size_t dof2_gt = j + block->dof_id_start_g -
                                 get_min_id_for_type(block->type, cpu_ram_layout->n_dihedrals);
             double entropy =
                 -cpu_ram_layout->tmp_result_entropy[i * block->n_dofs + j] +
@@ -891,7 +891,7 @@ class GPU_Ensemble {
     vector<GPU> gpus;
     vector<GPU> gpus_total;
     
-    GPU_Ensemble(unsigned int n_frames_padded, unsigned int n_bins, size_t n_bytes, unsigned int n_dofs_total){
+    GPU_Ensemble(size_t n_frames_padded, size_t n_bins, size_t n_bytes, size_t n_dofs_total){
         
         int n_devices_total;
         gpuErrchk(cudaGetDeviceCount(&n_devices_total));
@@ -929,7 +929,7 @@ class GPU_Ensemble {
     void report(bool verbose = false){
         cout << "Found " << gpus_total.size() << " GPU(s):" << endl;
         if(verbose) cout << endl <<endl;
-        for(unsigned int i = 0; i < gpus_total.size(); i++){
+        for(size_t i = 0; i < gpus_total.size(); i++){
             if(verbose){
                 print_gpu(gpus_total[i]);
                 cout << endl;
@@ -940,7 +940,7 @@ class GPU_Ensemble {
         }
         if(!verbose) cout << endl;
         cout << "Using compatible GPUs with CUDA capability >= 6.1:" << endl;
-        for(unsigned int i = 0; i < gpus.size(); i++){
+        for(size_t i = 0; i < gpus.size(); i++){
             cout<<gpus[i].property.name<<endl;
         }
         cout<<endl<<endl;
@@ -952,13 +952,13 @@ class GPU_Ensemble {
 class RAM {
 public:
   CPU_RAM_Layout *cpu_ram_layout; // the RAM layout on the CPU
-  unsigned int n_dihedrals; // the number of dihedrals of the molecule(s)
-  unsigned int n_dofs_total; // the total number of degrees of freedom
+  size_t n_dihedrals; // the number of dihedrals of the molecule(s)
+  size_t n_dofs_total; // the total number of degrees of freedom
   vector<CPU_RAM_Block> blocks; // a vector holding all the CPU_RAM_Blocks to be deployed to the two RAM banks
     GPU_Ensemble* my_gpus;
 
   RAM(size_t cpu_n_bytes, size_t gpu_n_bytes,
-      Bat *bat, unsigned int n_bins) {
+      Bat *bat, size_t n_bins) {
       
     this->n_dihedrals = bat->get_n_dihedrals(); // get the number of dihedrals from the .(g)bat file
     this->n_dofs_total = 3 * (n_dihedrals + 1); // calculate the total number number of degrees of freedom from the number of dihedrals 
@@ -969,9 +969,9 @@ public:
     cpu_ram_layout =
         new CPU_RAM_Layout(bat->get_n_frames_padded(4), cpu_n_bytes, my_gpus->gpus[0].layout->dofs_per_block, n_dihedrals); // create the RAM layout on the CPU using dofs_per_block of gpu[0] (this should e the same on all of them)
       
-    for (unsigned int i = 0; i < n_dofs_total;
+    for (size_t i = 0; i < n_dofs_total;
          i += cpu_ram_layout->dofs_per_block) { // create CPU_RAM_Blocks according to cpu_ram_layout->dofs_per_block
-      unsigned int end_g = i + cpu_ram_layout->dofs_per_block - 1;
+      size_t end_g = i + cpu_ram_layout->dofs_per_block - 1;
       if (end_g > n_dofs_total - 1) // the last block can contain less dofs than the others
         end_g = n_dofs_total - 1;
       blocks.push_back(*new CPU_RAM_Block( // save the created blocks in the blocks vector
@@ -998,17 +998,17 @@ public:
 class PARENT_GPU {
 public:
   RAM *ram; // an object containing the CPU as well as the GPU RAM layout
-  unsigned int n_bins; // the number of bins used for building the histograms (for 2D histograms, n_bins^2 is used)
-  unsigned int n_frames; // the numberof frames in the trajectory
-  unsigned int n_frames_padded; // the padded number of frames. The padding is done to a multiple of 4 and used in the histo2D_shared_block kernel for efficient data loading
+  size_t n_bins; // the number of bins used for building the histograms (for 2D histograms, n_bins^2 is used)
+  size_t n_frames; // the numberof frames in the trajectory
+  size_t n_frames_padded; // the padded number of frames. The padding is done to a multiple of 4 and used in the histo2D_shared_block kernel for efficient data loading
   Entropy_Matrix *ent_mat; // the Entropy_Matrix used for I/O 
-  unsigned int n_dihedrals; // the number of dihedrals in the molecule(s)
+  size_t n_dihedrals; // the number of dihedrals in the molecule(s)
   Bat *bat; // a class mapping the bond-angle-torsion trajectory (torsion==dihedral)
     Work work;
 
   PARENT_GPU(size_t cpu_n_bytes,
              size_t gpu_n_bytes, char const *bat_str,
-             unsigned int n_bins) {
+             size_t n_bins) {
     
     this->n_bins = n_bins; // store the number of bins fro the calculation
     bat = new Bat(bat_str); // map a Bat object to the .(g)bat file
@@ -1028,9 +1028,9 @@ public:
     // Using the following more complicated scheme, every but the first hard-disk fetch is converted into a pair calculation.
     // For 5 blocks, a simple scheme would calculate the block pairs in the order (0,1),(0,2),(0,3),(0,4),(1,2),(1,3),(1,4),(2,3),(2,4),(3,4). It takes two hard-disk fetches from (0,4) to (1,2) and from (1,4) to (2,3)
     // The present scheme calculates the pairs like (0,1),(0,2),(0,3),(0,4),(1,4),(1,2),(1,3),(2,3),(2,4),(3,4)
-    unsigned int skip = 0;
-    unsigned int skip_next = 0;
-    for (unsigned int i = 0; i < ram->blocks.size() - 1; i++) { 
+    size_t skip = 0;
+    size_t skip_next = 0;
+    for (size_t i = 0; i < ram->blocks.size() - 1; i++) { 
         skip = skip_next;
         if((skip!=0) && (i==skip)){
             cout << endl
@@ -1062,7 +1062,7 @@ public:
             calculate_block_pair_cpu(&(ram->blocks[i]), &(ram->blocks[skip])); // calculate the 2D entropy values for the currently loaded block pair
              cout<<"Calculating Block pair "<<i+1<<" and "<<skip+1<<"."<<endl;
         }
-      for (unsigned int j = i + 1; j < ram->blocks.size(); j++) {
+      for (size_t j = i + 1; j < ram->blocks.size(); j++) {
         if(skip != j){
             skip_next = j;
             cout << endl
@@ -1084,8 +1084,8 @@ public:
   void calculate_block_pair_cpu(CPU_RAM_Block *block1, CPU_RAM_Block *block2) {
     vector< vector<int> > tmp_work;
     vector<int> tmp_task;
-    for (unsigned int k = 0; k < block1->blocks.size(); k++) {
-      for (unsigned int l = 0; l < block2->blocks.size(); l++) {
+    for (size_t k = 0; k < block1->blocks.size(); k++) {
+      for (size_t l = 0; l < block2->blocks.size(); l++) {
         tmp_task.clear();
         tmp_task.push_back(k);
         tmp_task.push_back(l);
@@ -1096,10 +1096,10 @@ public:
     vector<thread> threads;
     
     gpuErrchk( cudaSetDevice(0) ); //------
-    for(unsigned int i = 0; i < ram->my_gpus->gpus.size(); i++){
+    for(size_t i = 0; i < ram->my_gpus->gpus.size(); i++){
         threads.push_back(thread(work,&(ram->my_gpus->gpus[i]), &(block1->blocks), &(block2->blocks)));
     }
-    for(unsigned int i = 0; i < threads.size(); i++){
+    for(size_t i = 0; i < threads.size(); i++){
         threads[i].join();
     }
   }
@@ -1109,10 +1109,10 @@ public:
     vector<int> tmp_task;
   
   //TODO:does not yield significant performance gains, maybe revert for clearer code
-    unsigned int skip = 0;
-    unsigned int skip_next = 0;
+    size_t skip = 0;
+    size_t skip_next = 0;
     
-    for (unsigned int i = 0; i < block->blocks.size() - 1; i++) {
+    for (size_t i = 0; i < block->blocks.size() - 1; i++) {
         skip = skip_next;
         if((skip!=0) && (i==skip)){
             tmp_task.clear();
@@ -1134,7 +1134,7 @@ public:
             tmp_task.push_back(skip);
             tmp_work.push_back(tmp_task);
         }
-        for (unsigned int j = i + 1; j < block->blocks.size(); j++) {
+        for (size_t j = i + 1; j < block->blocks.size(); j++) {
             if(skip != j){
                 skip_next = j;
                 tmp_task.clear();
@@ -1151,10 +1151,10 @@ public:
     work.add_work(tmp_work);
     vector<thread> threads;
     
-    for(unsigned int i = 0; i < ram->my_gpus->gpus.size(); i++){
+    for(size_t i = 0; i < ram->my_gpus->gpus.size(); i++){
         threads.push_back(thread(work,&(ram->my_gpus->gpus[i]), &(block->blocks), &(block->blocks)));
     }
-    for(unsigned int i = 0; i < threads.size(); i++){
+    for(size_t i = 0; i < threads.size(); i++){
         threads[i].join();
     }
   }
@@ -1167,7 +1167,7 @@ int main(int argc, char *argv[]) {
   timeval tv_start, tv_end;
   gettimeofday(&tv_start, NULL);
 
-  unsigned int n_bins;
+  size_t n_bins;
   vector< vector<int> > dihedrals_top;
   vector<float> masses;
   vector<string> residues;
@@ -1199,7 +1199,7 @@ int main(int argc, char *argv[]) {
     cerr << "USAGE: " << argv[0] << " -f input.[g]bat -o entropy.par -b #bins --cpu_ram #GiB --gpu_ram #GiB\n";
     exit(EXIT_FAILURE);
   }
-  if (sscanf(arg_parser.get("-b"), "%ud", &n_bins) != 1) {
+  if (sscanf(arg_parser.get("-b"), "%zu", &n_bins) != 1) {
     // read the number of bins and check for correctness
     cerr << "ERROR: Could not read number of bins from command line! Aborting"
          << endl;
