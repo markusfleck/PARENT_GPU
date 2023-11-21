@@ -58,7 +58,8 @@ needs to be installed to read the trajectories. E. g. on Debian/Ubuntu/Linux Min
 
     sudo apt install libgromacs-dev
 
-inside a shell. Then unzip and navigate to the top folder. In the file run.sh change the parameter
+inside a shell (if you face gromacs errors later on during compilation, refer to the troublshooting section). Then 
+unzip and navigate to the top folder. In the file run.sh change the parameter
 IN_NAME to the path and name of your .top and .xtc files ignoring the file extensions.
 (if those two files have different base names, consider changing them or using symbolic links).
 Change OUT_NAME to "output/{name_of_your_protein}". Review the commented configuration in the 
@@ -114,13 +115,49 @@ You are strongly encouraged to read the rest of this document, but at least the 
   want to start troubleshooting (or maybe fine tuning). Note that the Makefile supports compiling for a CUDA capability higher than
   6.1 by issuing ```make CUDA_ARCH={cuda_capability_without_dot}```.
 
-## 1.2) Troubleshooting
-### 1.2.1) Fixing "fatal error: gromacs/fileio/xtcio.h: No such file or directory"
+## 1.1) Docker
+
+  For building Docker images, a Dockerfile has been provided. Building and running the Docker image works in the following manner. 
+  Note that you might need root privileges on the host machine for the following commands to be able to talk to the Docker daemon. Build the image via
+
+    docker build -t parent_gpu .
+
+  PARENT is compiled during the build. A user named "docker" with sudo privileges is created in the image (if you want 
+  to become root, issue "sudo su"). The password for the user is set to "docker", you might want to change this. 
+  You can start a container from the image issuing
+
+    docker run -it -v $(pwd):/PARENT_GPU --name parent_gpu --gpus all parent_gpu
+
+  This logs you in the container as the docker user. The "-v $(pwd):/PARENT" maps your current host directory to the
+  /PARENT directory in the container. Changes in the host directory are reflected in the container /PARENT directory
+  and vice versa. Note that this means that the PARENT binaries compiled during the image building step are overlayed
+  by the host working directory. In particular, if your current mapped host working directory contains binaries
+  compiled on the host, problems will arise. In this case, from within 
+  the container, issue 
+
+    make clean; make
+
+  If you do not want such a mapping to the host directory, remove the "-v $(pwd):/PARENT" switch. In this case, you
+  will acccess the binaries compiled during the image building stage. Note, however, that you need to transfer your
+  calculated files manually from the container to the host (refer to the according docker documentation in this case).
+  WARNING: If you delete the container without having the files transferred and without directory mapping, your calulations 
+  are lost.
+
+  After stopping the container using the "exit" command inside the container shell, you can restart it via
+
+    docker container restart parent_gpu; docker container attach parent_gpu
+
+  The Dockerfiles contain a short summary of the commands given here. Also, you might want to install
+  additional tools during bulding the docker image. The according location to do so is marked with a comment.
+
+## 1.3) Troubleshooting
+### 1.3.1) Fixing "fatal error: gromacs/fileio/xtcio.h: No such file or directory"
 You need to have a libgromacs version <= 2018.8 installed. Newer versions do not include the functions declared in xtcio.h, which is used for reading the GROMACS trajectory .xtc files. Ubuntu 18.04 and Linux mint 19.3 feature the libgromacs-dev package version 2018.1-1, so
 
     sudo apt install libgromacs-dev
 
-is sufficient here. Older versions should probably work as well. If your operating system is Ubuntu >=20/Linux Mint >=20 or another GNU/Linux distribution, applying the following steps analogously should do the trick:
+is sufficient here. Older versions should probably work as well. If your operating system is Ubuntu >=20/Linux Mint >=20 or another GNU/Linux distribution, you have two options. Either use Docker, as outlined above, or compile GROMACS
+from scratch. For compiling, apply the following steps.
 
     mkdir -p ~/programs/gromacs-2018.8_build/
     cd ~/programs/gromacs-2018.8_build/
@@ -150,12 +187,12 @@ Last but not least, you need to set environment variables. On Ubuntu/Linux Mint/
     export LIBRARY_PATH=~/programs/gromacs-2018.8/lib:$LIBRARY_PATH
     export LD_LIBRARY_PATH=~/programs/gromacs-2018.8/lib:$LD_LIBRARY_PATH
 
-You might consider adding the above three lines to your ~/.bashrc file. Note, however, that setting these environment variables might interfere with another GROMACS installation you might have. In this case, comment the lines in your .bashrc and use a fresh shell before using GROMACS again.  
+You might consider adding the above three lines to your ~/.bashrc file. Note, however, that setting these environment variables could interfere with another GROMACS installation you might have. In this case, comment the lines in your .bashrc and use a fresh shell before using GROMACS again.
    
   
 #  2) RUNNING YOUR OWN TRAJECTORIES
   
-  The easiest way to do this is by just modifying the file "run.sh" in the top directory as described 
+  The easiest way to do this is by just modifying the file "run.sh" in the top directory as described in
   chapter 0 as well as in run.sh by the comments:
   
   The input files (GROMACS .top and .xtc) as well as the output path/name should be specified either 
@@ -311,6 +348,9 @@ The program is used in the following manner:
 	bin/MIST_GPU -f input.par -o output.par
 
 The only difference between input.par and output.par is that only the significant mutual information terms are non-zero in output.par.
+
+When working with large molecules, input.par comprises several gigabytes and might not fit on your GPU RAM. In this case, MIST_GPU becomes extremely slow. MIST_openMP, performing calculations on the CPU, has been provided for these cases. It is invoked in the same manner as MIST_GPU. If input.par does not fit on your CPU either, your last option is
+to use the MPI/openMP version of the code in the original PARENT repository and perform calculations on a cluster.
 
 
 ## 3.5) get_values_from_PAR
