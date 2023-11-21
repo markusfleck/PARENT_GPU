@@ -635,8 +635,8 @@ class Work{
             gpuErrchk( cudaSetDevice(gpu->id) );
             gpuErrchk( cudaMemset(gpu->layout->histograms, 0, bytes_to_zero) );
 
-        for (unsigned int i = 0; i < block1->n_dofs; i++) {
-          for (unsigned int j = 0; j < block2->n_dofs; j++) {
+        for (size_t i = 0; i < block1->n_dofs; i++) {
+          for (size_t j = 0; j < block2->n_dofs; j++) {
             
             unsigned int dof1_g = i + block1->dof_id_start_g;
             unsigned int dof2_g = j + block2->dof_id_start_g;
@@ -664,8 +664,8 @@ class Work{
         }
         
 
-        for (unsigned int i = 0; i < block1->n_dofs; i++) {
-          for (unsigned int j = 0; j < block2->n_dofs; j++) {
+        for (size_t i = 0; i < block1->n_dofs; i++) {
+          for (size_t j = 0; j < block2->n_dofs; j++) {
             unsigned int dof1_g = i + block1->dof_id_start_g;
             unsigned int dof2_g = j + block2->dof_id_start_g;
             PRECISION min1 = cpu_ram_layout->minima[dof1_g];
@@ -765,8 +765,8 @@ class Work{
             gpuErrchk( cudaSetDevice(gpu->id) );
             gpuErrchk( cudaMemset(gpu->layout->histograms, 0, bytes_to_zero) );
 
-        for (unsigned int i = 0; i < block->n_dofs - 1; i++) {
-          for (unsigned int j = i + 1; j < block->n_dofs; j++) {
+        for (size_t i = 0; i < block->n_dofs - 1; i++) {
+          for (size_t j = i + 1; j < block->n_dofs; j++) {
             unsigned int dof1_g = i + block->dof_id_start_g;
             unsigned int dof2_g = j + block->dof_id_start_g;
             PRECISION min1 = cpu_ram_layout->minima[dof1_g];
@@ -793,8 +793,8 @@ class Work{
         }
 
 
-        for (unsigned int i = 0; i < block->n_dofs - 1; i++) {
-          for (unsigned int j = i + 1; j < block->n_dofs; j++) {
+        for (size_t i = 0; i < block->n_dofs - 1; i++) {
+          for (size_t j = i + 1; j < block->n_dofs; j++) {
             unsigned int dof1_g = i + block->dof_id_start_g;
             unsigned int dof2_g = j + block->dof_id_start_g;
             PRECISION min1 = cpu_ram_layout->minima[dof1_g];
