@@ -32,6 +32,7 @@
 #include <sys/time.h>
 #include <vector>
 #include <thread>
+#include <atomic>
 
 #include "../util/util.h"
 #include "../util/io/io.h"
