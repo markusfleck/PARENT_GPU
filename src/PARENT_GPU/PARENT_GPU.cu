@@ -186,7 +186,7 @@ public:
             type_id_start_g[type] + i * gpu_dofs_per_block; // calculate the id of the first dof in the GPU_RAM_Block to be created
         size_t gpu_block_id_end_g =
             type_id_start_g[type] + (i + 1) * gpu_dofs_per_block - 1; // calculate the id of the last dof in the GPU_RAM_Block to be created
-        if (int(gpu_block_id_end_g) > type_id_end_g[type])
+        if ((long long int) (gpu_block_id_end_g) > type_id_end_g[type])
           gpu_block_id_end_g = type_id_end_g[type]; // if gpu_block_id_end_g refers to a different dof type than gpu_block_id_start_g, set gpu_block_id_end_g to the last id of the current dof type 
         PRECISION *cpu_ram_start =
             block_start + (gpu_block_id_start_g - dof_id_start_g) * n_frames_padded; // caluclate the address of the first dof of the current GPU_RAM_Block in the CPU RAM
@@ -207,7 +207,7 @@ public:
 #pragma omp parallel
     {
       PRECISION modFit, binsize;
-      int longestZeroStretch, longestZeroStretchPos, currentZeroStretch,
+      long long int longestZeroStretch, longestZeroStretchPos, currentZeroStretch,
           currentZeroStretchPos;
       bool zeroExists;
       long long int histo[MODFITNBINS];
@@ -215,17 +215,17 @@ public:
 #pragma omp for
       for (size_t j = 0; j < type_n_dofs[TYPE_D]; j++) { // for all dihedrals
         // first build a histogram of the dihedral values over the trajectory
-        for (int k = 0; k < MODFITNBINS; k++)
+        for (size_t k = 0; k < MODFITNBINS; k++)
           histo[k] = 0;
 
         binsize = (2 * pi +
                    5e-9 * (sizeof(PRECISION) == sizeof(float) ? 100000 : 1)) /
                   MODFITNBINS; // divide 2 pi into MODFITNBINS bins, making sure that we cover a little more than 2 pi (depending on the precision used for the calculations) 
         for (size_t i = 0; i < n_frames; i++) // bin the dihedrals
-          histo[int((dihedrals[j * n_frames_padded + i]) / binsize)] += 1;
+          histo[size_t((dihedrals[j * n_frames_padded + i]) / binsize)] += 1;
 
         zeroExists = false;
-        for (int k = 0; k < MODFITNBINS; k++) // check if there are empty bins
+        for (size_t k = 0; k < MODFITNBINS; k++) // check if there are empty bins
           zeroExists = zeroExists || (histo[k] == 0);
 
         if (zeroExists) { // if any of the bins of the histogram is empty find
@@ -233,9 +233,9 @@ public:
           longestZeroStretch = 0;
           currentZeroStretch = 0;
           longestZeroStretchPos = -1;
-          for (int k = 0; k < 2 * MODFITNBINS;
+          for (size_t k = 0; k < 2 * MODFITNBINS;
                k++) {                // for all bins of the histogram
-            int l = k % MODFITNBINS; // taking car of zero stretches which span
+            size_t l = k % MODFITNBINS; // taking car of zero stretches which span
                                      // the circular boundaries
             if ((currentZeroStretch == 0) &&
                 (histo[l] == 0)) { // find and save a beginning zero stretch
@@ -259,7 +259,7 @@ public:
           longestZeroStretchPos =
               0; // misuse the zeroStretch variables for determining the minimally filled bin
           longestZeroStretch = histo[0];
-          for (int k = 0; k < MODFITNBINS; k++) {
+          for (size_t k = 0; k < MODFITNBINS; k++) {
             if (histo[k] < longestZeroStretch) {
               longestZeroStretch = histo[k];
               longestZeroStretchPos = k;
@@ -273,7 +273,7 @@ public:
           dihedrals[j * n_frames_padded + k] =
               dihedrals[j * n_frames_padded + k] + modFit -
               2 * pi *
-                  int((dihedrals[j * n_frames_padded + k] + modFit) /
+                  size_t((dihedrals[j * n_frames_padded + k] + modFit) /
                       (2 * pi)); // and apply it taking care of circularity
         }
       }
@@ -324,8 +324,8 @@ public:
 #pragma omp parallel
     {
       PRECISION binsize, probDens, binval, plnpsum, Jac;
-      long long int histo[n_bins];
-      int occupbins;
+      size_t histo[n_bins];
+      size_t occupbins;
 #pragma omp for
       for (size_t j = dof_id_start_g; j <= dof_id_end_g;
            j++) { // for all dofs (using omp threads)
@@ -336,7 +336,7 @@ public:
                   n_bins; // calculate the size of the bins
         for (size_t i = 0; i < n_frames;
              i++) { // and fill the histogram using all frames of the trajectory
-          histo[int(
+          histo[size_t(
               (block_start[(j - dof_id_start_g) * n_frames_padded + i] - minima[j]) /
               binsize)] += 1;
         }
@@ -529,12 +529,12 @@ class Spin_Lock{
 
 class GPU {
     public:
-        int id;
+        size_t id;
         struct cudaDeviceProp property;
         GPU_RAM_Layout* layout;
-        int state[2];
+        size_t state[2];
         cudaStream_t streams[N_STREAMS]; // an array of CUDA streams
-    GPU(int id, struct cudaDeviceProp property, size_t n_frames_padded, size_t n_bins, size_t n_bytes, size_t n_dofs_total, bool init_ram = false){
+    GPU(size_t id, struct cudaDeviceProp property, size_t n_frames_padded, size_t n_bins, size_t n_bytes, size_t n_dofs_total, bool init_ram = false){
         this->id = id;
         this->property = property;
         gpuErrchk(cudaSetDevice(id));
@@ -549,7 +549,7 @@ class GPU {
 
 class Work{
     public:
-    static vector< vector<int> > my_work;
+    static vector< vector<size_t> > my_work;
     static Spin_Lock spin_lock;
     size_t n_frames, n_frames_padded;
     Entropy_Matrix* ent_mat;
@@ -568,13 +568,13 @@ class Work{
             this -> cpu_ram_layout = cpu_ram_layout;
         }
         
-        void add_work(vector< vector<int> > work){
+        void add_work(vector< vector<size_t> > work){
             spin_lock.lock();
                 for(size_t i = 0; i < work.size(); i++) my_work.push_back(work[i]);
             spin_lock.unlock();
         }
         
-        int get_work(int gpu_state[2], vector< vector<int> >* work){ // TODO: use gpu_state for cleverer work distribution/data fetching
+        size_t get_work(size_t gpu_state[2], vector< vector<size_t> >* work){ // TODO: use gpu_state for cleverer work distribution/data fetching
             spin_lock.lock();
                 if(my_work.size() == 0){
                     spin_lock.unlock();
@@ -587,7 +587,7 @@ class Work{
         }
         
         void operator() (GPU* gpu, vector<GPU_RAM_Block>* blocks1, vector<GPU_RAM_Block>* blocks2){
-            vector< vector<int> > work;
+            vector< vector<size_t> > work;
             while( get_work(gpu->state, &work) ){
                 for(size_t i = 0; i < work.size(); i++){ // TODO: use gpu_state for cleverer data fetching
                     if(work[i].size() == 1){
@@ -607,7 +607,7 @@ class Work{
             }
         }
         
-        void deploy(GPU_RAM_Block *block, int gpu_id, PRECISION* gpu_ram_start){
+        void deploy(GPU_RAM_Block *block, size_t gpu_id, PRECISION* gpu_ram_start){
             spin_lock.lock();
                 gpuErrchk( cudaSetDevice(gpu_id) );
                 block -> deploy(gpu_ram_start);
@@ -650,7 +650,7 @@ class Work{
             unsigned int *histogram = gpu->layout->histograms +
                                       (i * block2->n_dofs + j) * gpu->layout->n_bins * gpu->layout->n_bins;
             
-            int blocks = (n_frames + (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE - 1) ) / (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE);
+            size_t blocks = (n_frames + (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE - 1) ) / (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE);
                 gpuErrchk( cudaSetDevice(gpu->id) );
                 #ifdef USE_SHARED_MEM_HISTOGRAMS
                 histo2D_shared_block<<<blocks, HISTOGRAM_THREADS, gpu->layout->n_bins * gpu->layout->n_bins * sizeof(unsigned int), gpu->streams[(i * block2->n_dofs + j) % N_STREAMS]>>>(
@@ -682,7 +682,7 @@ class Work{
                 gpu->layout->result + i * block2->n_dofs + j;
             unsigned int *occupbins =
                 gpu->layout->occupied_bins + i * block2->n_dofs + j;
-            int blocks = (gpu->layout->n_bins * gpu->layout->n_bins + (PLNP_THREADS - 1) ) / PLNP_THREADS;
+            size_t blocks = (gpu->layout->n_bins * gpu->layout->n_bins + (PLNP_THREADS - 1) ) / PLNP_THREADS;
             
                 gpuErrchk( cudaSetDevice(gpu->id) );
                 switch (get_pair_type(block1->type, block2->type)) {
@@ -779,7 +779,7 @@ class Work{
             unsigned int *histogram = gpu->layout->histograms +
                                       (i * block->n_dofs + j) * gpu->layout->n_bins * gpu->layout->n_bins;
           
-            int blocks = (n_frames + (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE - 1) ) / (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE);
+            size_t blocks = (n_frames + (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE - 1) ) / (HISTOGRAM_THREADS * HISTOGRAM_THREAD_WORK_MULTIPLE);
                 gpuErrchk( cudaSetDevice(gpu->id) );
                 #ifdef USE_SHARED_MEM_HISTOGRAMS
                 histo2D_shared_block<<<blocks, HISTOGRAM_THREADS, gpu->layout->n_bins * gpu->layout->n_bins * sizeof(unsigned int), gpu->streams[(i * block->n_dofs + j) % N_STREAMS]>>>(
@@ -811,7 +811,7 @@ class Work{
                 gpu->layout->result + i * block->n_dofs + j;
             unsigned int *occupbins =
                 gpu->layout->occupied_bins + i * block->n_dofs + j;
-            int blocks = (gpu->layout->n_bins * gpu->layout->n_bins + (PLNP_THREADS - 1) ) / PLNP_THREADS;
+            size_t blocks = (gpu->layout->n_bins * gpu->layout->n_bins + (PLNP_THREADS - 1) ) / PLNP_THREADS;
             
 
                 gpuErrchk( cudaSetDevice(gpu->id) );
@@ -883,7 +883,7 @@ class Work{
         spin_lock.unlock();
       }
 };
-vector< vector<int> > Work::my_work;
+vector< vector<size_t> > Work::my_work;
 Spin_Lock Work::spin_lock;
 
 class GPU_Ensemble {
@@ -1082,8 +1082,8 @@ public:
   }
 
   void calculate_block_pair_cpu(CPU_RAM_Block *block1, CPU_RAM_Block *block2) {
-    vector< vector<int> > tmp_work;
-    vector<int> tmp_task;
+    vector< vector<size_t> > tmp_work;
+    vector<size_t> tmp_task;
     for (size_t k = 0; k < block1->blocks.size(); k++) {
       for (size_t l = 0; l < block2->blocks.size(); l++) {
         tmp_task.clear();
@@ -1105,8 +1105,8 @@ public:
   }
 
   void calculate_block_cpu(CPU_RAM_Block *block) { //play the same game as for the hard-disk loads in calculate_entropy() 
-    vector< vector<int> > tmp_work;
-    vector<int> tmp_task;
+    vector< vector<size_t> > tmp_work;
+    vector<size_t> tmp_task;
   
   //TODO:does not yield significant performance gains, maybe revert for clearer code
     size_t skip = 0;

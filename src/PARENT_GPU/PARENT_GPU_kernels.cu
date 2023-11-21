@@ -76,7 +76,7 @@ __global__ void histo2D_shared_block(PRECISION* __restrict__ traj1, PRECISION* _
   }
 
   
-  int leftover = numFrames - 4 *idx;
+  long long int leftover = numFrames - 4 *idx;
   while(leftover > 0){
     atomicAdd(&histo_block[size_t((traj1[numFrames - leftover] - min1) / binSize1) * n_bins + size_t((traj2[numFrames - leftover] - min2) / binSize2)], 1);
     leftover--;
