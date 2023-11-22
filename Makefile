@@ -19,8 +19,17 @@ endif
 
 CXX = g++
 CXXFLAGS = -O3 -Wall
+CUDAFLAGS = -O3
+DBGFLAGS = 
+CUDADBGFLAGS = 
 
 all : bat mie mist analyze
+
+debug : DBGFLAGS = -g3
+debug : CUDADBGFLAGS = -g
+debug : CXXFLAGS = -O0 -Wall
+debug : CUDAFLAGS = -O0
+debug : all
 
 bat: bin/BAT_builder bin/convert_BAT_to_GBAT
 
@@ -43,16 +52,16 @@ bin :
 
 
 bin/BAT_builder : src/BAT_builder/bat.cpp obj/io.o obj/topology.o obj/BAT_topology.o obj/BAT_trajectory.o obj/util.o | bin
-	$(CXX) src/BAT_builder/bat.cpp obj/io.o obj/topology.o obj/BAT_topology.o obj/BAT_trajectory.o obj/util.o -lgromacs -o bin/BAT_builder $(CXXFLAGS)
+	$(CXX) $(DBGFLAGS) src/BAT_builder/bat.cpp obj/io.o obj/topology.o obj/BAT_topology.o obj/BAT_trajectory.o obj/util.o -lgromacs -o bin/BAT_builder $(CXXFLAGS)
     
 obj/topology.o: src/BAT_builder/topology.cpp src/BAT_builder/topology.h| obj
-	$(CXX) -c -std=c++11 src/BAT_builder/topology.cpp -o obj/topology.o $(CXXFLAGS)
+	$(CXX) $(DBGFLAGS) -c -std=c++11 src/BAT_builder/topology.cpp -o obj/topology.o $(CXXFLAGS)
     
 obj/BAT_topology.o: src/BAT_builder/BAT_topology.cpp src/BAT_builder/BAT_topology.h | obj
-	$(CXX) -c -std=c++11 src/BAT_builder/BAT_topology.cpp -o obj/BAT_topology.o $(CXXFLAGS)
+	$(CXX) $(DBGFLAGS) -c -std=c++11 src/BAT_builder/BAT_topology.cpp -o obj/BAT_topology.o $(CXXFLAGS)
     
 obj/BAT_trajectory.o: src/BAT_builder/BAT_trajectory.cpp src/BAT_builder/BAT_trajectory.h | obj
-	$(CXX) -c -std=c++14 src/BAT_builder/BAT_trajectory.cpp -o obj/BAT_trajectory.o $(CXXFLAGS)
+	$(CXX) $(DBGFLAGS) -c -std=c++14 src/BAT_builder/BAT_trajectory.cpp -o obj/BAT_trajectory.o $(CXXFLAGS)
 
 obj/io.o: obj/io_binary.o obj/io_text.o obj/Arg_Parser.o | obj
 	ld -r obj/io_binary.o obj/io_text.o obj/Arg_Parser.o -o obj/io.o
@@ -61,60 +70,59 @@ obj/io_binary.o: obj/io_binary_tmp.o obj/Entropy_Matrix.o obj/Bat_File.o | obj
 	ld -r obj/io_binary_tmp.o obj/Entropy_Matrix.o obj/Bat_File.o -o obj/io_binary.o
     
 obj/io_binary_tmp.o: src/util/io/io_binary.cpp src/util/io/io_binary.h | obj
-	$(CXX) -c src/util/io/io_binary.cpp -o obj/io_binary_tmp.o $(CXXFLAGS)
+	$(CXX) $(DBGFLAGS) -c src/util/io/io_binary.cpp -o obj/io_binary_tmp.o $(CXXFLAGS)
     
 obj/Entropy_Matrix.o: src/util/classes/Entropy_Matrix.cpp src/util/classes/Entropy_Matrix.h | obj    
-	$(CXX) -std=c++11 -c src/util/classes/Entropy_Matrix.cpp -o obj/Entropy_Matrix.o $(CXXFLAGS)
+	$(CXX) $(DBGFLAGS) -std=c++11 -c src/util/classes/Entropy_Matrix.cpp -o obj/Entropy_Matrix.o $(CXXFLAGS)
 
 obj/Bat_File.o: src/util/classes/Bat.cpp src/util/classes/Bat.h | obj
-	$(CXX) -std=c++11 -c src/util/classes/Bat.cpp -o obj/Bat_File.o $(CXXFLAGS)
+	$(CXX) $(DBGFLAGS) -std=c++11 -c src/util/classes/Bat.cpp -o obj/Bat_File.o $(CXXFLAGS)
 
 obj/io_text.o: src/util/io/io_text.cpp src/util/io/io_text.h | obj
-	$(CXX) -c src/util/io/io_text.cpp -o obj/io_text.o $(CXXFLAGS)
+	$(CXX) $(DBGFLAGS) -c src/util/io/io_text.cpp -o obj/io_text.o $(CXXFLAGS)
 
 obj/Arg_Parser.o: src/util/classes/Arg_Parser.cpp src/util/classes/Arg_Parser.h | obj
-	$(CXX) -c src/util/classes/Arg_Parser.cpp -o obj/Arg_Parser.o $(CXXFLAGS)
+	$(CXX) $(DBGFLAGS) -c src/util/classes/Arg_Parser.cpp -o obj/Arg_Parser.o $(CXXFLAGS)
 
 obj/util.o: src/util/util.cpp src/util/util.h | obj
-	$(CXX) -c src/util/util.cpp -o obj/util.o $(CXXFLAGS)
+	$(CXX) $(DBGFLAGS) -c src/util/util.cpp -o obj/util.o $(CXXFLAGS)
     
 obj/Residue_Representation.o: src/util/classes/Residue_Representation.cpp src/util/classes/Residue_Representation.h | obj
-	$(CXX) --std=c++11 -c src/util/classes/Residue_Representation.cpp -o obj/Residue_Representation.o $(CXXFLAGS)
+	$(CXX) $(DBGFLAGS) --std=c++11 -c src/util/classes/Residue_Representation.cpp -o obj/Residue_Representation.o $(CXXFLAGS)
     
     
     
 
 bin/convert_BAT_to_GBAT: src/BAT_builder/convert_BAT_to_GBAT.cpp obj/util.o obj/Arg_Parser.o obj/Bat_File.o | bin
-	$(CXX) --std=c++11 src/BAT_builder/convert_BAT_to_GBAT.cpp obj/util.o obj/Arg_Parser.o obj/Bat_File.o -o bin/convert_BAT_to_GBAT $(CXXFLAGS)
+	$(CXX) $(DBGFLAGS) --std=c++11 src/BAT_builder/convert_BAT_to_GBAT.cpp obj/util.o obj/Arg_Parser.o obj/Bat_File.o -o bin/convert_BAT_to_GBAT $(CXXFLAGS)
     
 
 bin/get_values_from_PAR: src/analysis/get_values_from_PAR.cpp obj/io.o obj/util.o | bin
-	$(CXX) --std=c++11 -O3 src/analysis/get_values_from_PAR.cpp obj/io.o obj/util.o -o bin/get_values_from_PAR $(CXXFLAGS)
+	$(CXX) $(DBGFLAGS) --std=c++11 src/analysis/get_values_from_PAR.cpp obj/io.o obj/util.o -o bin/get_values_from_PAR $(CXXFLAGS)
     
     
 bin/hierarchical_residue_clusters: src/analysis/hierarchical_residue_clusters.cpp obj/Residue_Representation.o obj/Entropy_Matrix.o obj/Arg_Parser.o obj/util.o | bin
-	$(CXX) --std=c++11 -O3 src/analysis/hierarchical_residue_clusters.cpp obj/Residue_Representation.o obj/Entropy_Matrix.o obj/Arg_Parser.o obj/util.o -o bin/hierarchical_residue_clusters $(CXXFLAGS)
+	$(CXX) $(DBGFLAGS) --std=c++11 src/analysis/hierarchical_residue_clusters.cpp obj/Residue_Representation.o obj/Entropy_Matrix.o obj/Arg_Parser.o obj/util.o -o bin/hierarchical_residue_clusters $(CXXFLAGS)
     
     
 bin/analyze_residue: src/analysis/analyze_residue.cpp obj/Residue_Representation.o obj/Entropy_Matrix.o obj/Arg_Parser.o obj/util.o | bin
-	$(CXX) --std=c++11 -O3 src/analysis/analyze_residue.cpp obj/Residue_Representation.o obj/Entropy_Matrix.o obj/Arg_Parser.o obj/util.o -o bin/analyze_residue $(CXXFLAGS)
+	$(CXX) $(DBGFLAGS) --std=c++11 src/analysis/analyze_residue.cpp obj/Residue_Representation.o obj/Entropy_Matrix.o obj/Arg_Parser.o obj/util.o -o bin/analyze_residue $(CXXFLAGS)
     
     
 bin/analyze_residue_pair: src/analysis/analyze_residue_pair.cpp obj/Residue_Representation.o obj/Entropy_Matrix.o obj/Arg_Parser.o obj/util.o | bin
-	$(CXX) --std=c++11 -O3 src/analysis/analyze_residue_pair.cpp obj/Residue_Representation.o obj/Entropy_Matrix.o obj/Arg_Parser.o obj/util.o -o bin/analyze_residue_pair $(CXXFLAGS)
+	$(CXX) $(DBGFLAGS) --std=c++11 src/analysis/analyze_residue_pair.cpp obj/Residue_Representation.o obj/Entropy_Matrix.o obj/Arg_Parser.o obj/util.o -o bin/analyze_residue_pair $(CXXFLAGS)
 
 
 bin/PARENT_GPU: src/PARENT_GPU/PARENT_GPU.cu src/PARENT_GPU/PARENT_GPU_kernels.cu obj/io.o src/util/io/io.h obj/util.o src/util/types.h | bin
-	nvcc --std=c++11 -O3 -Xptxas -O3 -Xcompiler -O3,-Wall,-fopenmp,-pthread  -gencode=arch=compute_$(CUDA_ARCH),code=\"sm_$(CUDA_ARCH),compute_$(CUDA_ARCH)\" src/PARENT_GPU/PARENT_GPU.cu obj/io.o obj/util.o -o bin/PARENT_GPU
+	nvcc $(CUDADBGFLAGS) --std=c++11 $(CUDAFLAGS) -Xptxas $(CUDAFLAGS) -Xcompiler $(CUDAFLAGS),-Wall,-fopenmp,-pthread,$(DBGFLAGS)  -gencode=arch=compute_$(CUDA_ARCH),code=\"sm_$(CUDA_ARCH),compute_$(CUDA_ARCH)\" src/PARENT_GPU/PARENT_GPU.cu obj/io.o obj/util.o -o bin/PARENT_GPU
     
 
 bin/MIST_openMP: src/MIST_GPU/MIST_openMP.cpp obj/io.o obj/util.o | bin
-	$(CXX) --std=c++11 -O3 -fopenmp src/MIST_GPU/MIST_openMP.cpp obj/io.o obj/util.o -o bin/MIST_openMP
-
+	$(CXX) $(DBGFLAGS) --std=c++11 -fopenmp src/MIST_GPU/MIST_openMP.cpp obj/io.o obj/util.o -o bin/MIST_openMP $(CXXFLAGS)
 
 
 bin/MIST_GPU: src/MIST_GPU/MIST_GPU.cu obj/io.o obj/util.o | bin
-	nvcc --std=c++11 -O3 -Xptxas -O3 -Xcompiler -O3,-Wall,-fopenmp -gencode=arch=compute_$(CUDA_ARCH),code=\"sm_$(CUDA_ARCH),compute_$(CUDA_ARCH)\" src/MIST_GPU/MIST_GPU.cu obj/io.o obj/util.o -o bin/MIST_GPU
+	nvcc $(CUDADBGFLAGS) --std=c++11 $(CUDAFLAGS) -Xptxas $(CUDAFLAGS) -Xcompiler $(CUDAFLAGS),-Wall,-fopenmp,$(DBGFLAGS) -gencode=arch=compute_$(CUDA_ARCH),code=\"sm_$(CUDA_ARCH),compute_$(CUDA_ARCH)\" src/MIST_GPU/MIST_GPU.cu obj/io.o obj/util.o -o bin/MIST_GPU
 
 
 
