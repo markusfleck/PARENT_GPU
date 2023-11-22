@@ -30,8 +30,7 @@ using namespace std;
 
     //constructor for the .xtc to .bat conversion
     BAT_Trajectory::BAT_Trajectory(string trjFileI,string trjFileO, vector< vector <int> > *dihedralsIn, vector <float> *massvec_in, vector <string> *residues_in,vector <int> *residueNumbers_in,vector <string> *atomNames_in,vector <string> *belongsToMolecule_in, int double_prec_in) {
-
-        //definition, allcation etc
+        //definition, allocation etc
         pi=acos(-1); //define pi
         dihedrals_top=(*dihedralsIn); //a list of all dihedrals in the system (index0=atom1, index1=atom2, index2=atom3, index3=atom4, index4=type(physical=0,pseudo=1,improper=-1), index5="parent"dihedral(for phaseangle))
         massvec=(*massvec_in); //contains the masses all atoms of the system
@@ -49,27 +48,47 @@ using namespace std;
         double_prec=double_prec_in; //should the .bat trajectory be written in double precision?
         numframes=0;
 
+        // set the variables to be read from the trajectory
+        read_frame.bTime = true;
+        read_frame.bBox = true;
+        read_frame.bX = true;
+        read_frame.bPrec = true;
+
         convert_xtc_to_BAT(); //start the procedure
     }
+
     //constructor for the .bat to .xtc conversion
     BAT_Trajectory::BAT_Trajectory(string trjFileI,string trjFileO) {
         pi=acos(-1); //define pi
         trjFileIn=trjFileI; //name of the input file
         trjFileOut=trjFileO; //name of the output file
 
+        // set the variables to be written to the trajectory
+        write_frame.bStep = true;
+        write_frame.bTime = true;
+        write_frame.bBox = true;
+        write_frame.bX = true;
+        write_frame.bPrec = true;
+
         convert_BAT_to_xtc(); //start the procedure
     }
 
-    
-
-
-
     int BAT_Trajectory::convert_xtc_to_BAT() {
-        int natoms;
-        xtc_ifile = open_xtc((char*)trjFileIn.c_str(), "r"); //open the .xtc input file
-        read_first_xtc(xtc_ifile, &natoms, &step, &time, box, &x, &prec, &bOK); //initialize variables for trajectory reading and read the first frame
-                                    
-                                    
+
+        //initialize variables for trajectory reading and read the first frame
+        output_env_init_default(&oenvp);
+        bOK = read_first_frame(oenvp, &t_trxstatus_ifile, (const char*)trjFileIn.c_str(), &read_frame, TRX_NEED_X);
+        if(!bOK){
+            cerr << "ERROR: UNSPECIFIED ERROR READING TRAJECTORY!\n";
+            exit(EXIT_FAILURE);
+        }
+        // parse the read frame
+        natoms = read_frame.natoms;
+        time = read_frame.time;
+        memcpy(box, read_frame.box, 9 * sizeof(real));
+        x = read_frame.x;
+        prec = read_frame.prec;
+
         if((unsigned int)(natoms)!=dihedrals_top.size()+3) {
             cerr << "ERROR: NUMBER OF ATOMS IN THE TRAJECTORY("<<natoms<<") DOES NOT FIT THE TOPOLOGY("<<dihedrals_top.size()+3<<")!\n";
             exit(EXIT_FAILURE);
@@ -87,7 +106,7 @@ using namespace std;
             cerr<<"ERROR ALLOCATNG MEMORY! ABORTING.\n";
             exit(EXIT_FAILURE);
         }
-        if(xtc_ifile!=NULL) {
+        if(t_trxstatus_ifile!=NULL) {
             ofstream outfile(trjFileOut.c_str(), ios::binary | ios::out);//open the .bat binary output file (function from XTC Library (GROMACS) )
             if(outfile.is_open()) {
                 if(write_BAT_header(&outfile,double_prec,numframes,&dihedrals_top, &massvec, &residues,&residueNumbers,&atomNames,&belongsToMolecule)!=0) {//write the header information to the .bat file
@@ -113,7 +132,15 @@ using namespace std;
                     numframes++; //count the number of frames
                 
                 //for all remaining frames in the trajectory
-                while(read_next_xtc(xtc_ifile, natoms, &step, &time, box, x, &prec, &bOK) == 1){ //read a frame from the trajectory
+                while(read_next_frame(oenvp, t_trxstatus_ifile, &read_frame)){ //read a frame from the trajectory
+
+                    // parse the read frame
+                    natoms = read_frame.natoms;
+                    time = read_frame.time;
+                    memcpy(box, read_frame.box, 9 * sizeof(real));
+                    x = read_frame.x;
+                    prec = read_frame.prec;
+                    
                     for(unsigned int j=0; j<dihedrals_top.size()+3; j++) {
                         x[j][0]*=10.0; //for comparison with previous work, use Angstroem
                         x[j][1]*=10.0;
@@ -140,7 +167,7 @@ using namespace std;
                 cerr << "ERROR: UNABLE TO OPEN FILE "<<trjFileOut.c_str()<<" !\n";
                 exit(EXIT_FAILURE);
             }
-            close_xtc(xtc_ifile); //close the xtc file
+            close_trx(t_trxstatus_ifile); //close the xtc file
         }
         else {
             cerr << "ERROR: UNABLE TO OPEN FILE "<<trjFileIn.c_str()<<" !\n";
@@ -158,8 +185,8 @@ using namespace std;
             if (read_BAT_header(&infile,&double_prec,&numframes,&dihedrals_top,&massvec, &residues,&residueNumbers,&atomNames,&belongsToMolecule)) {
                 exit(EXIT_FAILURE);   //read the header of the .bat file
             }
-            xtc_ofile = open_xtc((char*)trjFileIn.c_str(), "w"); //open the .xtc input file
-            if(xtc_ofile==NULL) {
+            t_trxstatus_ofile = open_trx((const char*)trjFileOut.c_str(), "w"); //open the .xtc input file
+            if(t_trxstatus_ofile==NULL) {
                 cerr << "ERROR: UNABLE TO OPEN FILE "<<trjFileOut.c_str()<<" !\n";
                 exit(EXIT_FAILURE);
             }
@@ -178,8 +205,10 @@ using namespace std;
                 cerr<<"ERROR ALLOCATNG MEMORY! ABORTING.\n";
                 exit(EXIT_FAILURE);
             }
-            step=0;
-            while(read_BAT_frame(&infile,double_prec,dihedrals_top.size(), &time, &prec, (float **)box, root_origin_cartesian,&root_origin_theta,&root_origin_phi,&root_origin_dihedral,bondsFull,anglesFull,dihedrals)==0) { //for all frames in the .bat file
+            step = 0;
+            while(read_BAT_frame(&infile,double_prec,dihedrals_top.size(), &write_frame.time, &write_frame.prec,
+             (float **)write_frame.box, root_origin_cartesian, &root_origin_theta, &root_origin_phi, &root_origin_dihedral,
+              bondsFull, anglesFull, dihedrals)==0) { //for all frames in the .bat file
                 rootbond[0]=bondsFull[0];
                 rootbond[1]=bondsFull[1];
                 rootangle=anglesFull[0];
@@ -190,19 +219,27 @@ using namespace std;
                     x[j][1]/=10.0;
                     x[j][2]/=10.0;
                 }
-                write_xtc(xtc_ofile,natoms,step,time,box,x,prec); //write the current frame to the .xtc file
+
+                // Fill the rest of the frame to be written
+                write_frame.step = step;
+                write_frame.x = x;
+                write_frame.natoms = natoms;
+
+                // write the frame
+                write_trxframe(t_trxstatus_ofile, &write_frame, NULL);
+
                 step++;
             }
             infile.close();
             if(step!=numframes) {
-                cerr << "ERROR: COULD ONLY PROCESS "<<step<<"FRAMES OUT OF "<<numframes<<" !\n";
+                cerr << "ERROR: COULD ONLY PROCESS "<<step<<" FRAMES OUT OF "<<numframes<<" !\n";
                 exit(EXIT_FAILURE);
             }
         } else {
             cerr << "ERROR: UNABLE TO OPEN FILE "<<trjFileIn.c_str()<<" !\n";
             exit(EXIT_FAILURE);
         }
-        close_xtc(xtc_ofile); //close the xtc file
+        close_trx(t_trxstatus_ofile); //close the xtc file
         return 0;
     }
 

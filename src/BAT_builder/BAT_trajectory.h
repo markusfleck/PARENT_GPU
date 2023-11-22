@@ -17,16 +17,11 @@
 #ifndef BAT_TRAJECTORY_H
 #define BAT_TRAJECTORY_H
 
-#ifdef COMPAT
-    #define VARTYPE int
-#else
-    #define VARTYPE int64_t
-#endif
-
-
 #include <vector>
 #include <string>
-#include <gromacs/fileio/xtcio.h>
+#include <gromacs/fileio/trxio.h>
+#include <gromacs/fileio/oenv.h>
+#include <gromacs/trajectory/trajectoryframe.h>
 
 
 
@@ -34,9 +29,9 @@ class BAT_Trajectory {
 
 public:
     //constructor for the .xtc to .bat conversion
-    BAT_Trajectory(std::string trjFileI,std::string trjFileO, std::vector< std::vector <int> > *dihedralsIn, std::vector <float> *massvec_in, std::vector <std::string> *residues_in,std::vector <int> *residueNumbers_in,std::vector <std::string> *atomNames_in,std::vector <std::string> *belongsToMolecule_in, int double_prec_in=1);
+    BAT_Trajectory(std::string trjFileI, std::string trjFileO, std::vector< std::vector <int> > *dihedralsIn, std::vector <float> *massvec_in, std::vector <std::string> *residues_in,std::vector <int> *residueNumbers_in,std::vector <std::string> *atomNames_in,std::vector <std::string> *belongsToMolecule_in, int double_prec_in=1);
     //constructor for the .bat to .xtc conversion
-    BAT_Trajectory(std::string trjFileI,std::string trjFileO);
+    BAT_Trajectory(std::string trjFileI, std::string trjFileO);
 
     int double_prec;
     std::vector< std::vector <int> > dihedrals_top;
@@ -62,15 +57,18 @@ public:
     double pi;
     int numframes;
     
-    struct t_fileio* xtc_ifile;
-    struct t_fileio* xtc_ofile;
+    t_trxstatus* t_trxstatus_ifile;
+    t_trxstatus* t_trxstatus_ofile;
+    gmx_output_env_t* oenvp;
     int natoms;
-    VARTYPE step;
+    int64_t step;
     real time;
     matrix box;
     rvec*  x;
     real prec;
     gmx_bool bOK;
+    struct t_trxframe read_frame;
+    struct t_trxframe write_frame;
     
     int convert_xtc_to_BAT();
     int convert_BAT_to_xtc();

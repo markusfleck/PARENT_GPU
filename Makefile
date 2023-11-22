@@ -52,8 +52,7 @@ obj/BAT_topology.o: src/BAT_builder/BAT_topology.cpp src/BAT_builder/BAT_topolog
 	$(CXX) -c -std=c++11 src/BAT_builder/BAT_topology.cpp -o obj/BAT_topology.o $(CXXFLAGS)
     
 obj/BAT_trajectory.o: src/BAT_builder/BAT_trajectory.cpp src/BAT_builder/BAT_trajectory.h | obj
-	- $(CXX) -c -std=c++11 src/BAT_builder/BAT_trajectory.cpp -o obj/BAT_trajectory.o $(CXXFLAGS)
-	if [ ! -f obj/BAT_trajectory.o ]; then echo "\nTRYING COMPATIBILITY COMPILATION.\n";$(CXX) -c -std=c++11 src/BAT_builder/BAT_trajectory.cpp -o obj/BAT_trajectory.o $(CXXFLAGS) -DCOMPAT; fi
+	$(CXX) -c -std=c++14 src/BAT_builder/BAT_trajectory.cpp -o obj/BAT_trajectory.o $(CXXFLAGS)
 
 obj/io.o: obj/io_binary.o obj/io_text.o obj/Arg_Parser.o | obj
 	ld -r obj/io_binary.o obj/io_text.o obj/Arg_Parser.o -o obj/io.o
