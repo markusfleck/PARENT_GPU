@@ -176,7 +176,7 @@ int main(int argc, char *argv[]){
         cout << "PROGRAM FINISHED SUCCESSFULLY." << endl << endl << endl;
         
         
-    } catch (My_Error my_error) {
+    } catch (const My_Error &my_error) {
         cerr << my_error.what() << endl;
         cerr << "USAGE:\n" << argv[0] << " -p input.par [--short]" << endl;
         return 1;
