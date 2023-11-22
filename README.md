@@ -68,11 +68,15 @@ first lines of run.sh. Then run
     bash run.sh
     
 inside your shell. The configurational entropy output using the maximum information spanning tree (MIST) approximation 
-is contained in "output/{name_of_your_protein}_MIST.txt". The residue interaction networks are contained in output/{name_of_your_protein}.vmd (this file can be loaded in vmd for visualization).
+is contained in "output/{name_of_your_protein}_MIST.txt". The residue interaction networks are contained in 
+output/{name_of_your_protein}.vmd (this file can be loaded in vmd for visualization).
 
 If you run the code for testing purposes only without any modifications,
 the calculation should take something like 2-5 minutes. The resulting values at the end of the
 files should match those in "test_system/sample_output".
+
+Note that run.sh is an example script, demonstrating the usage of the programs contained in this program suite. 
+Modify/comment its contents to your own needs or, using it as a guideline, write your own script(s).
 
 You are strongly encouraged to read the rest of this document, but at least the next section.
  
@@ -85,11 +89,24 @@ You are strongly encouraged to read the rest of this document, but at least the 
   sure that your system supports this. The minimum requirements are CUDA 9.0
   as well as a graphics card supporting CUDA compute capability 6.1.
   
-  The code was developed and tested on a GTX 1060, GTX 1070 as well as a RTX 2060 Super,
-  with CUDA 11.0 installed, Linux Mint 19.3 Tricia as the GNU/Linux operating system,
-  libgromacs version 2018.1-1, g++ version 7.5.0. libgromacs versions >= 2019 are not supported, 
-  see below for fixing compilation errors concerning "gromacs/fileio/xtcio.h". If you run into other issues, please
+  The code was developed and tested on a RTX 2060 Super and a RTX 4090,
+  with CUDA 12.3 installed, Linux Mint 21.2 Victoria as the GNU/Linux operating system,
+  libgromacs version 2021.4-2, g++ version 11.4.0. libgromacs versions >= 2019 should be working, 
+  see below for fixing compilation errors. If you run into other issues, please
   consider sending me a bug report containing the according information as just given.
+
+  Note that versions of PARENT_GPU prior to 22. 11. 2023 did not support using more than
+  16G of VRAM via 
+
+     PARENT_GPU --gpu_ram >16 ....
+
+  Using more than 16G of VRAM lead to inaccurate results up to catastrophic nonsense (or segfaults).
+  Note the according parameter in run.sh. The error manifested itself if more than 1310 degrees
+  of freedom were put on the GPU. In other words, using e.g. a RTX 4090 was fine for as long as 
+  less than 1311 degrees of freedom were put on the GPU (the number of which are put to stdout).
+  Using more than 16G of VRAM, given enough CPU RAM provided and a large enough system,
+  leads to putting more than 1310 degrees of freedom on the GPU and previously led to inaccurate results.
+  The error is fixed now and great care was taken that future high VRAM scenarios work as expected.
 
   Sample trajectory and topology files are shipped with this package.
   To check out if your system correctly compiles and runs all of the provided
@@ -115,10 +132,17 @@ You are strongly encouraged to read the rest of this document, but at least the 
   want to start troubleshooting (or maybe fine tuning). Note that the Makefile supports compiling for a CUDA capability higher than
   6.1 by issuing ```make CUDA_ARCH={cuda_capability_without_dot}```.
 
+  Note that the shipped Makefile features a debug target, which you want to use via
+  
+    make debug
+  
+  if you want to set breakpoints while debugging the code.
+
 ## 1.1) Docker
 
   For building Docker images, a Dockerfile has been provided. Building and running the Docker image works in the following manner. 
-  Note that you might need root privileges on the host machine for the following commands to be able to talk to the Docker daemon. Build the image via
+  Note that NVIDIA docker needs to be installed. Also note that you might need root privileges on the host machine for the following 
+  commands to be able to talk to the Docker daemon. Build the image via
 
     docker build -t parent_gpu .
 
@@ -150,46 +174,20 @@ You are strongly encouraged to read the rest of this document, but at least the 
   The Dockerfiles contain a short summary of the commands given here. Also, you might want to install
   additional tools during bulding the docker image. The according location to do so is marked with a comment.
 
+  Last but not least, if for some reason you cannot use the installed Ubuntu/CUDA version, you might want
+  to change the line
+
+    FROM nvidia/cuda:12.3.0-devel-ubuntu22.04
+
+   according to your needs. You can lokk up available configurations at https://hub.docker.com/ .
+
 ## 1.3) Troubleshooting
-### 1.3.1) Fixing "fatal error: gromacs/fileio/xtcio.h: No such file or directory"
-You need to have a libgromacs version <= 2018.8 installed. Newer versions do not include the functions declared in xtcio.h, which is used for reading the GROMACS trajectory .xtc files. Ubuntu 18.04 and Linux mint 19.3 feature the libgromacs-dev package version 2018.1-1, so
+### 1.3.1) Fixing compilation errors of BAT_trajectory.cpp
+You need to have a modern libgromacs version installed (>= 2019 should work, but I have just tested the system configuration listed above). For
+modern versions of Ubuntu or Linux Mint, the following should do the trick:
 
     sudo apt install libgromacs-dev
 
-is sufficient here. Older versions should probably work as well. If your operating system is Ubuntu >=20/Linux Mint >=20 or another GNU/Linux distribution, you have two options. Either use Docker, as outlined above, or compile GROMACS
-from scratch. For compiling, apply the following steps.
-
-    mkdir -p ~/programs/gromacs-2018.8_build/
-    cd ~/programs/gromacs-2018.8_build/
-    wget ftp://ftp.gromacs.org/pub/gromacs/gromacs-2018.8.tar.gz
-    tar xvfz gromacs-2018.8.tar.gz
-    mkdir -p gromacs-2018.8/build
-    cd gromacs-2018.8/build
-
-If you have a gcc version < 4.8.1 or >=9, install e. g. gcc-8 and use it for compilation.
-On Ubuntu/Linux Mint/Debian and relatives issue:
-
-    sudo apt install gcc-8
-    export CC=`which gcc-8`
-
-Continue with (you can try to speed up the compilation by using multiple cores: use e. g. make -j4 on a quad core machine):
-
-    cmake .. -DGMX_BUILD_OWN_FFTW=ON -DREGRESSIONTEST_DOWNLOAD=ON -DCMAKE_INSTALL_PREFIX=~/programs/gromacs-2018.8
-    make
-    make check
-    make install
-
-If you have problems downloading the regression tests, go with -DREGRESSIONTEST_DOWNLOAD=OFF and skip "make check".
-
-Last but not least, you need to set environment variables. On Ubuntu/Linux Mint/Debian and relatives, this is done by:
-
-    export CPLUS_INCLUDE_PATH=~/programs/gromacs-2018.8/include:$CPLUS_INCLUDE_PATH
-    export LIBRARY_PATH=~/programs/gromacs-2018.8/lib:$LIBRARY_PATH
-    export LD_LIBRARY_PATH=~/programs/gromacs-2018.8/lib:$LD_LIBRARY_PATH
-
-You might consider adding the above three lines to your ~/.bashrc file. Note, however, that setting these environment variables could interfere with another GROMACS installation you might have. In this case, comment the lines in your .bashrc and use a fresh shell before using GROMACS again.
-   
-  
 #  2) RUNNING YOUR OWN TRAJECTORIES
   
   The easiest way to do this is by just modifying the file "run.sh" in the top directory as described in
@@ -233,6 +231,9 @@ especially the line
     make clean; make CUDA_ARCH={cuda_capability_without_dot}
   
   when you change computers (e. g. heterogeneous cluster).
+
+  Note, however, that at the end of the day run.sh is an example script, demonstrating the usage of the programs contained in this program suite. 
+  Modify/comment its contents to your own needs or, using it as a guideline, write your own script(s).
   
 #  3) EXPLANATION OF THE PROGRAMS
   
@@ -283,8 +284,7 @@ This program was developed especially for the present GPU version of PARENT, i. 
 clusters,
 PARENT_GPU is targeted at workstations. This means that PARENT_GPU will 
 reload parts of the trajectory from the hard disk if the whole trajectory does not fit into CPU RAM, which is often the case. GROMACS trajectories are stored in a per-frame 
-fashion: for 
-every time step, the coordinates of the whole molecule are stored together, followed by the next frame. This means that the trajectory of a specific coordinate
+fashion: for every time step, the coordinates of the whole molecule are stored together, followed by the next frame. This means that the trajectory of a specific coordinate
 is scattered across the .xtc file. The .bat file format follows this convention. However, this format is inefficient for expansion-based entropy calculation:
 To compute 2D entropy values, the whole trajectory of both coordinates needs to be processed, i. e. loaded from hard disk if the CPU RAM is too small to hold the whole
 trajectory. The .gbat format now stores the trajectory of coordinates in a contiguous fashion, significantly improving hard disk reading times. For large projects,
@@ -295,8 +295,7 @@ with at least a million frames (for small systems, the time this conversion take
     bin/convert_BAT_to_GBAT -f input.bat -o ouput.gbat --ram #GiB
     
 input.bat and output.bat are self-explanatory. #GiB is the amount of CPU RAM you can provide in GiB. Be a little conservative here: If you have 16 GB RAM 
-installed, set 
-10 GiB here. 
+installed, set 10 GiB here.
 
 
 ## 3.3) PARENT_GPU
@@ -322,7 +321,8 @@ The program is used in the following manner:
 input.[g]bat is the result from the conversion to internal BAT coordinates done with BAT_builder or (subsequently) convert_BAT_to_GBAT.
 
 entropy.par is the binary output file, containing all the 1D and 2D entropy terms (from which the mutual information terms can be easily calculated).
-The header of the file includes the same information as for the .bat file as well as the numbers of bins which were used for the entropy calculation. The cpu_ram and gpu_ram parameters are the respective RAM amounts you want to provide. Assuming your system is not performing any other
+The header of the file includes the same information as for the .bat file as well as the numbers of bins which were used for the entropy calculation. 
+The cpu_ram and gpu_ram parameters are the respective RAM amounts you want to provide. Assuming your system is not performing any other
 calculations (which I would discourage), be somewhat conservative with the cpu_ram and a little conservative with the gpu_ram. E. g., if your machine has 32 GB 
 RAM and your GPU has 6 GB RAM, set 25 GiB for cpu_ram and 5.25 for gpu_ram. Being to aggressive here may result in either the Linux kernel or the NVIDIA driver 
 killing your program, which might be a painful experience if you run a large system where the calculation takes a long time. From my experience by now, PARENT_GPU 
@@ -349,8 +349,10 @@ The program is used in the following manner:
 
 The only difference between input.par and output.par is that only the significant mutual information terms are non-zero in output.par.
 
-When working with large molecules, input.par comprises several gigabytes and might not fit on your GPU RAM. In this case, MIST_GPU becomes extremely slow. MIST_openMP, performing calculations on the CPU, has been provided for these cases. It is invoked in the same manner as MIST_GPU. If input.par does not fit on your CPU either, your last option is
-to use the MPI/openMP version of the code in the original PARENT repository and perform calculations on a cluster.
+When working with large molecules, input.par comprises several gigabytes and might not fit on your GPU RAM. In this case, MIST_GPU becomes extremely slow. 
+MIST_openMP, performing calculations on the CPU, has been provided for these cases. It is invoked in the same manner as MIST_GPU. 
+If input.par does not fit on your CPU either, your last option is to use the MPI/openMP version of the code in the original PARENT repository 
+and perform calculations on a cluster.
 
 
 ## 3.5) get_values_from_PAR
