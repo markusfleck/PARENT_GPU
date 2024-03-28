@@ -659,7 +659,7 @@ class Work{
                 #endif
                     block1->gpu_ram_start + i * n_frames_padded,
                     block2->gpu_ram_start + j * n_frames_padded, n_frames, histogram, gpu->layout->n_bins,
-                    bin_size1, bin_size2, min1, min2);
+                    1/bin_size1, 1/bin_size2, min1, min2);
           }
         }
         
@@ -788,7 +788,7 @@ class Work{
                 #endif
                     block->gpu_ram_start + i * n_frames_padded,
                     block->gpu_ram_start + j * n_frames_padded, n_frames, histogram, gpu->layout->n_bins,
-                    bin_size1, bin_size2, min1, min2);
+                    1/bin_size1, 1/bin_size2, min1, min2);
           }
         }
 
