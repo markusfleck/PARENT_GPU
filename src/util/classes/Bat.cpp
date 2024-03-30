@@ -508,11 +508,6 @@ void Bat::write_GBAT_frame(unsigned int frame_number){
     try{
 
         unsigned char inc;
-        if (precision == 1) {
-            inc = sizeof(double); // if trajectory is in double precision
-        } else {
-            inc = sizeof(float);
-        }
 
         outfile.seekp(dofs_begin + frame_number *sizeof(float));
         outfile.write((char *)&time, sizeof(float)); // write the time of the current according .xtc frame as a float
@@ -523,40 +518,90 @@ void Bat::write_GBAT_frame(unsigned int frame_number){
         outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * sizeof(float) + frame_number * sizeof(float) * 9);
         outfile.write((char *)dbox, 9 * sizeof(float)); // write the box vectors of the current frame according .xtc frame for back conversion
         
-        outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * sizeof(float) * 9 + frame_number * inc);
-        outfile.write((char *)root_origin_cartesian, inc); // write the Cartestians of the first root atom (external coordinates) in double precision
-        
-        outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
-        outfile.write((char *)&root_origin_cartesian[1], inc);
-        
-        outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
-        outfile.write((char *)&root_origin_cartesian[2], inc);
-        
-        outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
-        outfile.write((char *)&root_origin_theta, inc); // write the polar coordinates of the second root atom relative to the first (external coordinates)
+        if (precision == 1) {
+
+            inc = sizeof(double); // if trajectory is in double precision
+
+            outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * sizeof(float) * 9 + frame_number * inc);
+            outfile.write((char *)root_origin_cartesian, inc); // write the Cartestians of the first root atom (external coordinates) in double precision
+
+            outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
+            outfile.write((char *)&root_origin_cartesian[1], inc);
             
-        outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
-        outfile.write((char *)&root_origin_phi, inc);
+            outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
+            outfile.write((char *)&root_origin_cartesian[2], inc);
             
-        outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
-        outfile.write((char *)&root_origin_dihedral, inc); // and the dihedral the root atoms form with the origin (external coordinates)
-        
-        for(int i = 0; i < n_bonds; i++){
             outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
-            outfile.write((char *)&bonds_frame[i], inc);
-        }
-        
-        for(int i = 0; i < n_angles; i++){
+            outfile.write((char *)&root_origin_theta, inc); // write the polar coordinates of the second root atom relative to the first (external coordinates)
+                
             outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
-            outfile.write((char *)&angles_frame[i], inc);
-        }
-        
-        for(int i = 0; i < n_dihedrals; i++){
+            outfile.write((char *)&root_origin_phi, inc);
+                
             outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
-            outfile.write((char *)&dihedrals_frame[i], inc);
+            outfile.write((char *)&root_origin_dihedral, inc); // and the dihedral the root atoms form with the origin (external coordinates)
+            
+            for(int i = 0; i < n_bonds; i++){
+                outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
+                outfile.write((char *)&bonds_frame[i], inc);
+            }
+            
+            for(int i = 0; i < n_angles; i++){
+                outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
+                outfile.write((char *)&angles_frame[i], inc);
+            }
+            
+            for(int i = 0; i < n_dihedrals; i++){
+                outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
+                outfile.write((char *)&dihedrals_frame[i], inc);
+            }
+
+         } else if (precision == 0) {
+            inc = sizeof(float); // if trajectory is in single precision
+            float fdummy;
+
+            fdummy = root_origin_cartesian[0];
+            outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * sizeof(float) * 9 + frame_number * inc);
+            outfile.write((char *)&fdummy, inc); // write the Cartestians of the first root atom (external coordinates) in double precision
+
+            fdummy = root_origin_cartesian[1];
+            outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
+            outfile.write((char *)&fdummy, inc);
+            
+            fdummy = root_origin_cartesian[2];
+            outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
+            outfile.write((char *)&fdummy, inc);
+
+            fdummy = root_origin_theta;            
+            outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
+            outfile.write((char *)&fdummy, inc); // write the polar coordinates of the second root atom relative to the first (external coordinates)
+
+            fdummy = root_origin_phi;                
+            outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
+            outfile.write((char *)&fdummy, inc);
+
+            fdummy = root_origin_dihedral;                
+            outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
+            outfile.write((char *)&fdummy, inc); // and the dihedral the root atoms form with the origin (external coordinates)
+            
+            for(int i = 0; i < n_bonds; i++){
+                fdummy = bonds_frame[i];
+                outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
+                outfile.write((char *)&fdummy, inc);
+            }
+            
+            for(int i = 0; i < n_angles; i++){
+                fdummy = angles_frame[i];
+                outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
+                outfile.write((char *)&fdummy, inc);
+            }
+            
+            for(int i = 0; i < n_dihedrals; i++){
+                fdummy = dihedrals_frame[i];
+                outfile.seekp(size_t(outfile.tellp()) + (n_frames - frame_number - 1) * inc + frame_number * inc);
+                outfile.write((char *)&fdummy, inc);
+            }            
         }
 
-    
     } catch (const My_Error& my_error) {
         throw my_error;
     } catch (...) {
@@ -611,7 +656,7 @@ void Bat::load_dofs(T* type_addr[3], int type_id_start[3], int type_id_end[3], u
             infile.seekg(dofs_begin);
             for (int frame = 0; frame < n_frames; frame++) {
               // to read a frame from the .bat trajectory
-              T ddummy[6];
+              double ddummy[6];
               float fdummy[11];
               int a_start_g = n_bonds;
               int d_start_g = n_bonds + n_angles;
@@ -635,66 +680,62 @@ void Bat::load_dofs(T* type_addr[3], int type_id_start[3], int type_id_end[3], u
                       sizeof(float)); // read time, precision and box vectors to dummies
               
               
-              infile.read((char *)ddummy, 6 * inc); // external coordinates to dummies
+              infile.read((inc==sizeof(double)?(char*)ddummy:(char*)fdummy), 6 * inc); // external coordinates to dummies
               
 
-              infile.read((char *)ddummy,
+              infile.read((inc==sizeof(double)?(char*)ddummy:(char*)fdummy),
                          inc); // read the lengths of the two bonds connecting the root
                                // atoms (internal coordinates)
-              //~ cout<<"H1"<<endl;
+
               if ((b_counter_g >= type_id_start[TYPE_B]) &&
                   (b_counter_g <= type_id_end[TYPE_B]))
-                bonds[b_counter_lt++ * (n_frames + padding) + frame] = ddummy[0];
+                bonds[b_counter_lt++ * (n_frames + padding) + frame] = (inc==sizeof(double)?ddummy[0]:fdummy[0]);
               b_counter_g++;
-                //~ cout<<"H2"<<endl;
-              infile.read((char *)ddummy,
+
+              infile.read((inc==sizeof(double)?(char*)ddummy:(char*)fdummy),
                          inc); // read the lengths of the two bonds connecting the root
                                // atoms (internal coordinates)
               
               if ((b_counter_g >= type_id_start[TYPE_B]) &&
                   (b_counter_g <= type_id_end[TYPE_B]))
-                bonds[b_counter_lt++ * (n_frames + padding) + frame] = ddummy[0];
+                bonds[b_counter_lt++ * (n_frames + padding) + frame] = (inc==sizeof(double)?ddummy[0]:fdummy[0]);
               b_counter_g++;
-                //~ cout<<"H3"<<endl;
-              infile.read((char *)ddummy, inc); // and the angle between the two
+
+              infile.read((char *)fdummy, inc); // and the angle between the two
                                                // rootbonds (internal coordinates)
               
               if ((a_counter_g >= type_id_start[TYPE_A]) &&
                   (a_counter_g <= type_id_end[TYPE_A]))
-                angles[a_counter_lt++ * (n_frames + padding) + frame] = ddummy[0];
+                angles[a_counter_lt++ * (n_frames + padding) + frame] = (inc==sizeof(double)?ddummy[0]:fdummy[0]);
               a_counter_g++;
-                //~ cout<<"H4"<<endl;
+
               for (int i = 0; i < n_dihedrals;
                    i++) {                        // then for all dihedrals in the system
-                infile.read((char *)ddummy, inc); // read the bondlength between the last
+                infile.read((inc==sizeof(double)?(char*)ddummy:(char*)fdummy), inc); // read the bondlength between the last
                                                  // two atoms in the dihedral
-                //~ cout<<"H40"<<endl;
+
                 
                 if ((b_counter_g >= type_id_start[TYPE_B]) &&
                     (b_counter_g <= type_id_end[TYPE_B]))
-                        bonds[b_counter_lt++ * (n_frames + padding) + frame] = ddummy[0];
+                        bonds[b_counter_lt++ * (n_frames + padding) + frame] = (inc==sizeof(double)?ddummy[0]:fdummy[0]);
                 b_counter_g++;
-                //~ cout<<"H41"<<endl;
 
-                infile.read((char *)ddummy, inc); // read the angle between the last
-                                                 // threee atoms of the dihedral#
+                infile.read((inc==sizeof(double)?(char*)ddummy:(char*)fdummy), inc); // read the angle between the last
+                                                 // three atoms of the dihedral#
                 
                 if ((a_counter_g >= type_id_start[TYPE_A]) &&
                     (a_counter_g <= type_id_end[TYPE_A]))
-                  angles[a_counter_lt++ * (n_frames + padding) + frame] = ddummy[0];
+                  angles[a_counter_lt++ * (n_frames + padding) + frame] = (inc==sizeof(double)?ddummy[0]:fdummy[0]);
                 a_counter_g++;
-                //~ cout<<"H42"<<endl;
 
-                infile.read((char *)ddummy, inc); // and the value of the dihedral itself
+                infile.read((inc==sizeof(double)?(char*)ddummy:(char*)fdummy), inc); // and the value of the dihedral itself
                 
                 if ((d_counter_g >= type_id_start[TYPE_D]) &&
                     (d_counter_g <= type_id_end[TYPE_D]))
-                  dihedrals[d_counter_lt++ * (n_frames + padding) + frame] = ddummy[0];
+                  dihedrals[d_counter_lt++ * (n_frames + padding) + frame] = (inc==sizeof(double)?ddummy[0]:fdummy[0]);
                 d_counter_g++;
-                //~ cout<<"H43"<<endl;
               }
-              //~ cout<<"H5"<<endl;
-            }
+            } 
             if (padding > 0){
                 for(unsigned int type = 0; type < 3; type++){
                     for(int i = 0; i < (type_id_end[type] - type_id_start[type] + 1) ; i++) memset(&type_addr[type][ i * (n_frames + padding) + n_frames], 0.0, padding);
@@ -702,12 +743,22 @@ void Bat::load_dofs(T* type_addr[3], int type_id_start[3], int type_id_end[3], u
             }
         }
         else if(version == 4){
+            float fdummy;
+            double ddummy;
             if(padding>0){
                 for(unsigned int type = 0; type < 3; type++){
                     if ( (type_id_start[type] >= 0) && (type_id_end[type] >= 0) ){
                         infile.seekg(size_t(dofs_begin) + n_frames * (11 * sizeof(float) + (6 + type_id_start[type]) * inc) );
                         for(int i = 0; i < (type_id_end[type] - type_id_start[type] + 1) ; i++){
-                            infile.read((char *)(type_addr[type] + i * (n_frames + padding)), size_t(n_frames) * inc);
+                            if(inc==sizeof(T)){
+                                infile.read((char *)(type_addr[type] + i * (n_frames + padding)), size_t(n_frames) * inc);
+                            }
+                            else{
+                                for(size_t j = 0; j < size_t(n_frames); j++){
+                                    infile.read((inc==sizeof(double)?(char*)&ddummy:(char*)&fdummy), inc);
+                                    (type_addr[type] + i * (n_frames + padding))[j] = (inc==sizeof(double)?ddummy:fdummy);
+                                }
+                            }
                             memset(&type_addr[type][ i * (n_frames + padding) + n_frames], 0.0, padding);
                         }
                     }
@@ -717,7 +768,15 @@ void Bat::load_dofs(T* type_addr[3], int type_id_start[3], int type_id_end[3], u
                 for(unsigned int type = 0; type < 3; type++){
                     if ( (type_id_start[type] >= 0) && (type_id_end[type] >= 0) ){
                         infile.seekg(size_t(dofs_begin) + n_frames * (11 * sizeof(float) + (6 + type_id_start[type]) * inc) );
-                        infile.read((char *)type_addr[type], size_t(n_frames) * (type_id_end[type] - type_id_start[type] + 1) * inc);
+                        if(inc==sizeof(T)){
+                            infile.read((char *)type_addr[type], size_t(n_frames) * (type_id_end[type] - type_id_start[type] + 1) * inc);
+                        }
+                        else{
+                            for(size_t j = 0; j < size_t(n_frames)* (type_id_end[type] - type_id_start[type] + 1); j++){
+                                infile.read((inc==sizeof(double)?(char*)&ddummy:(char*)&fdummy), inc);
+                                type_addr[type][j] = (inc==sizeof(double)?ddummy:fdummy);
+                            }
+                        }
                     }
                 }
             }
@@ -757,7 +816,7 @@ void Bat::load_externals(float* tpd, T* externals) {//---------------------
         if(version == 3){
             for (int frame = 0; frame < n_frames; frame++) {
               // to read a frame from the .bat trajectory
-                T ddummy[6];
+                double ddummy[6];
                 float fdummy[11];
 
                 infile.seekg(dofs_begin + frame * ( (n_dofs + 6) * sizeof(T) + 11 * sizeof(float) ) );
@@ -777,17 +836,27 @@ void Bat::load_externals(float* tpd, T* externals) {//---------------------
               }
               memcpy(&tpd[2 * n_frames + frame * 9], &fdummy[2], 9 *sizeof(float));
             
-              infile.read((char *)ddummy, 6 * inc); // external coordinates to dummies
+              infile.read((inc==sizeof(double)?(char*)ddummy:(char*)fdummy), 6 * inc); // external coordinates to dummies
               
               for(unsigned int i = 0; i < 6; i++){
-                externals[i * n_frames + frame] = ddummy[i];
+                externals[i * n_frames + frame] = (inc==sizeof(double)?ddummy[i]:fdummy[i]);
               }
             }
         }
         else if(version == 4){
             infile.seekg(dofs_begin);
             infile.read((char *)tpd, n_frames * 11 * sizeof(float)); // read time, precision and box vectors to dummies
-            infile.read((char *)externals, n_frames * 6 * inc); // read external coordinates
+            if(inc==sizeof(T)){
+                infile.read((char *)externals, n_frames * 6 * inc); // read external coordinates
+            }
+            else{
+                double ddummy;
+                float fdummy;
+                for(size_t j = 0; j < size_t(n_frames) * 6; j++){
+                    infile.read((inc==sizeof(double)?(char*)&ddummy:(char*)&fdummy), inc);
+                    externals[j] = (inc==sizeof(double)?ddummy:fdummy);
+                }
+            }
         }
         else{
             My_Error my_error((string("ERROR WHILE READING BAT ") +
